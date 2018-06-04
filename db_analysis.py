@@ -1,10 +1,14 @@
 import pandas as pd
 import numpy as np
+import os
+import glob
+import csv
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_selection import SelectKBest, mutual_info_regression
 from sklearn.decomposition import FactorAnalysis
 from gap_statistic import OptimalK
+from xlsxwriter.workbook import Workbook
 
 
 def null_analysis(df):
@@ -64,3 +68,15 @@ def gap_optimalk(matrix):
     print('\nOptimal number of clusters is ', k)
 
     return k
+
+
+def csv_to_excel_converter(file):
+    for csvfile in glob.glob(os.path.join('.', file + '.csv')):
+        workbook = Workbook(csvfile[:-4] + '.xlsx')
+        worksheet = workbook.add_worksheet()
+        with open(csvfile, 'rt', encoding='utf8') as f:
+            reader = csv.reader(f)
+            for r, row in enumerate(reader):
+                for c, col in enumerate(row):
+                    worksheet.write(r, c, col)
+        workbook.close()

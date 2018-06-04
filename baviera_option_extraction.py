@@ -154,25 +154,6 @@ def db_color_replacement(df):
     return df
 
 
-# def db_color_replacement(df):
-#     colors_to_replace = {'black': 'preto', 'white': 'branco', 'blue': 'azul', 'red': 'vermelho', 'grey': 'cinzento', 'silver': 'prateado', 'orange': 'laranja', 'green': 'verde', 'anthrazit': 'antracite', 'antracit': 'antracite', 'brown': 'castanho', 'antracito': 'antracite', 'âmbar/preto/pr': 'ambar/preto/preto', 'beige': 'bege', 'kaschmirsilber': 'cashmere'}
-#     df['Cor_Exterior'] = df['Cor_Exterior'].replace(colors_to_replace)
-#     df['Cor_Interior'] = df['Cor_Interior'].replace(colors_to_replace)
-#
-#     unknown_ext_colors = df[df['Cor_Exterior'] == 0]['Cor'].unique()
-#     unknown_int_colors = df[df['Cor_Interior'] == 0]['Interior'].unique()
-#     print('Unknown Exterior Colors:', unknown_ext_colors, ', Removed', df[df['Cor_Exterior'] == 0].shape[0], 'lines in total, corresponding to ', df[df['Cor_Exterior'] == 0]['Nº Stock'].nunique(), 'vehicles')  # 49 lines removed, 3 vehicles
-#     print('Unknown Interior Colors:', unknown_int_colors, ', Removed', df[df['Cor_Interior'] == 0].shape[0], 'lines in total, corresponding to ', df[df['Cor_Interior'] == 0]['Nº Stock'].nunique(), 'vehicles')  # 2120 lines removed, 464 vehicles
-#
-#     # for color_int in unknown_int_colors:
-#     #     print(color_int, df[df['Interior'] == color_int]['Nº Stock'].nunique())
-#
-#     df.drop(df[df['Cor_Exterior'] == 0].index, axis=0, inplace=True)
-#     df.drop(df[df['Cor_Interior'] == 0].index, axis=0, inplace=True)
-#
-#     return df
-
-
 def db_score_calculation(df):
     df['stock_days'] = (df['Data Venda'] - df['Data Compra']).dt.days
     # df['margem_norm'] = (df['Margem'] - df['Margem'].min()) / (df['Margem'].max() - df['Margem'].min())
@@ -206,21 +187,23 @@ def main():
     start = time.time()
     print('Creating DB...')
 
-    output_file = 'output/' + 'baviera.csv'
+    full_db = 'output/' + 'db_full_baviera.csv'
+    stock_opt_db = 'output/' + 'db_baviera_stock_optimization.csv'
     input_file = 'sql_db/' + 'Opcionais Baviera.csv'
 
-    if os.path.isfile(output_file):
-        os.remove(output_file)
+    if os.path.isfile(full_db):
+        os.remove(full_db)
 
     df = pd.read_csv(input_file, delimiter=';', parse_dates=['Data Compra', 'Data Venda'], infer_datetime_format=True, decimal=',').dropna()
     df_initial = db_creation(df)
     df_second_step = db_color_replacement(df_initial)
     df_third_step = db_score_calculation(df_second_step)
     df_final = db_duplicate_removal(df_third_step)
-    df_final.to_csv(output_file)
+    df_final.to_csv(full_db)
 
-    # print(df_final.shape)
-    # print(df_final['Jantes'].unique())
+    if os.path.isfile(stock_opt_db):
+        os.remove(stock_opt_db)
+    df_final[['Modelo', 'Local da Venda', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'score']].to_csv(stock_opt_db)
 
     print('Runnning time: %.2f' % (time.time() - start))
 
