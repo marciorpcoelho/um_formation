@@ -71,7 +71,7 @@ def gap_optimalk(matrix):
 
 
 def csv_to_excel_converter(file):
-    for csvfile in glob.glob(os.path.join('.', file + '.csv')):
+    for csvfile in glob.glob(os.path.join('.', file)):
         workbook = Workbook(csvfile[:-4] + '.xlsx')
         worksheet = workbook.add_worksheet()
         with open(csvfile, 'rt', encoding='utf8') as f:
@@ -80,3 +80,9 @@ def csv_to_excel_converter(file):
                 for c, col in enumerate(row):
                     worksheet.write(r, c, col)
         workbook.close()
+
+
+def unique_chassis_comparison(pse_sales, cm_bmw_mini):
+    unique_chassis = pse_sales[pse_sales['nlr_code'] == '701']['chassis_number'].unique()
+    print('Number of unique BMW/Mini Cars on PSE_Sales:', pse_sales[pse_sales['nlr_code'] == '701']['chassis_number'].nunique())
+    print('Number of common chassis_numbers between PSE_Sales and CM BMW/MINI:', cm_bmw_mini[cm_bmw_mini['chassis_number'].isin(unique_chassis)].shape[0])

@@ -174,7 +174,7 @@ def db_score_calculation(df):
 
 
 def db_duplicate_removal(df):
-    cols_to_drop = ['Prov', 'CdCor', 'Cor', 'CdInt', 'Interior', 'Versão', 'Opcional', 'A', 'S', 'Custo', 'Tipo Encomenda', 'Data Compra', 'Data Venda', 'Vendedor', 'Canal de Venda']
+    cols_to_drop = ['Prov', 'CdCor', 'Cor', 'CdInt', 'Interior', 'Versão', 'Opcional', 'A', 'S', 'Custo', 'Data Compra', 'Data Venda', 'Vendedor', 'Canal de Venda']
     # Will probably need to also remove: stock_days, stock_days_norm, and one of the scores
     df = df.drop_duplicates(subset='Nº Stock')
     df.drop(cols_to_drop, axis=1, inplace=True)
@@ -203,7 +203,11 @@ def main():
 
     if os.path.isfile(stock_opt_db):
         os.remove(stock_opt_db)
-    df_final[['Modelo', 'Local da Venda', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'score']].to_csv(stock_opt_db)
+    df_final[['Modelo', 'Local da Venda', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'Tipo Encomenda', 'stock_days', 'Margem']].to_csv(stock_opt_db)
+
+    if os.path.isfile(full_db):
+        os.remove(full_db)
+    df_final.to_csv(full_db)
 
     print('Runnning time: %.2f' % (time.time() - start))
 
