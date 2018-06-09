@@ -122,12 +122,8 @@ def df_cleanup(df, pse=0, vhe=0):
 def ca_db_merge_alt(file11, file13):
     print('Merging CA DBs...')
 
-    # df_ca = pd.read_csv(file11, delimiter=';', encoding='latin-1')
-    # print(df_ca.head())
     df_ca = pd.read_csv(file11, delimiter=';', encoding='utf-8', dtype={'Chassis_Number': str, 'Registration_Number': str, 'Customer': str}, parse_dates=['Vehicle_In_Date', 'Registration_Date'], infer_datetime_format=True)
     df_dw_ca = pd.read_csv(file13, delimiter=';', encoding='utf-8', dtype={'Chassis_Number': str, 'Registration_Number': str}, parse_dates=['Vehicle_In_Date', 'Registration_Date'], infer_datetime_format=True)
-    # print(df_dw_ca.head())
-    # print(null_analysis(df_dw_ca))
 
     dfs = [df_ca, df_dw_ca]
     for df in dfs:
@@ -145,10 +141,11 @@ def ca_db_merge_alt(file11, file13):
     # df_ca['customer'] = df_ca_grouped['customer'].transform(lambda x: 'No values to aggregate' if pd.isnull(x).all() == True else x.fillna(method='ffill').fillna(method='bfill'))
     df_ca['customer'] = df_ca_grouped['customer'].transform(lambda x: x.fillna(method='ffill').fillna(method='bfill'))
 
-    output_file = 'sql_db/' + 'ca.csv'
-    if os.path.isfile(output_file):
-        os.remove(output_file)
-    df_ca.to_csv(output_file)
+    # output_file = 'sql_db/' + 'ca.csv'
+    save_csv(df_ca, 'sql_db/' + 'ca.csv')
+    # if os.path.isfile(output_file):
+    #     os.remove(output_file)
+    # df_ca.to_csv(output_file)
 
 
 def save_csv(df, name):
@@ -196,10 +193,11 @@ def crp_db_merge_alt(file12, file14):
     # df_crp['customer'] = df_crp_grouped['customer'].transform(lambda x: 'No values to aggregate' if pd.isnull(x).all() == True else x.fillna(method='ffill').fillna(method='bfill'))
     df_crp['customer'] = df_crp_grouped['customer'].apply(lambda x: x.ffill().bfill())
 
-    output_file = 'sql_db/' + 'crp.csv'
-    if os.path.isfile(output_file):
-        os.remove(output_file)
-    df_crp.to_csv(output_file)
+    # output_file = 'sql_db/' + 'crp.csv'
+    # if os.path.isfile(output_file):
+    #     os.remove(output_file)
+    # df_crp.to_csv(output_file)
+    save_csv(df_crp, 'sql_db/' + 'crp.csv')
 
 
 def crp_cm_merge(file9):
@@ -208,10 +206,11 @@ def crp_cm_merge(file9):
     df_cm = cm_crp_cleanup(file9)
 
     df_merged = pd.merge(df, df_cm, how='left', on=['chassis_number'], suffixes=('', '_y'))
-    repeated_cols_left = [x for x in list(df_merged) if '_y' in x]
+    repeated_cols_left = [x for x in list(df_merged) if '_y' in x if x != 'cm_years']
     df_merged.drop(repeated_cols_left, axis=1, inplace=True)
 
-    df_merged.to_csv('sql_db/' + 'crp_merged.csv')
+    save_csv(df_merged, 'sql_db/' + 'crp_merged.csv')
+    # df_merged.to_csv('sql_db/' + 'crp_merged.csv')
 
 
 def registration_number_flag(df):
@@ -228,90 +227,11 @@ def registration_number_flag(df):
     return df
 
 
-def ca_db_merge(file1, file3, file5, file7, file10):
-    print('Merging CA DBs...')
-    output_file = 'sql_db/' + 'BI_CA_Sales.csv'
-
-    df_vhe = pd.read_csv(file1, delimiter=';', encoding='latin-1', parse_dates=['slr_document_date'], infer_datetime_format=True)
-    df_pse = pd.read_csv(file3, delimiter=';', encoding='latin-1', parse_dates=['slr_document_date', 'vehicle_in_date', 'registration_date'], infer_datetime_format=True)
-    df_dw_vhe = pd.read_csv(file5, delimiter=';', encoding='latin-1', parse_dates=['slr_document_date'], infer_datetime_format=True)
-    df_dw_pse = pd.read_csv(file7, delimiter=';', encoding='latin-1', parse_dates=['slr_document_date', 'vehicle_in_date', 'registration_date'], infer_datetime_format=True)
-    df_cm = cm_ca_cleanup(file10)
-
-    df_vhe = df_cleanup(df_vhe, vhe=1)
-    df_pse = df_cleanup(df_pse, pse=1)
-    df_dw_pse = df_cleanup(df_dw_pse, pse=1)
-    df_dw_vhe = df_cleanup(df_dw_vhe, vhe=1)
-
-    df_pse_total = pd.concat([df_pse, df_dw_pse])
-    df_vhe_total = pd.concat([df_vhe, df_dw_vhe])
-
-    # df_ca = pd.merge(df_pse_total, df_vhe_total, on=['registration_number', 'slr_account'], suffixes=('', '_y'))
-    # repeated_cols = [x for x in list(df_ca) if '_y' in x]
-    # df_ca.drop(repeated_cols, axis=1, inplace=True)
-    # df = pd.merge(df_ca, df_cm, on=['registration_number'], suffixes=('', '_y'))
-    # df.drop(['vat_number', 'vhe_code', 'vhe_number'], axis=1, inplace=True)
-    # print(df_ca.head(10), '\n', null_analysis(df_ca), '\n', df_ca['registration_number'].nunique())
-    # print(df.head(10), '\n', null_analysis(df), '\n', df['registration_number'].nunique(), '\n', df.shape)
-
-    ######
-    df_ca_left = pd.merge(df_pse_total, df_vhe_total, how='left', on=['registration_number', 'slr_account'], suffixes=('', '_y'))
-    repeated_cols_left = [x for x in list(df_ca_left) if '_y' in x]
-    df_ca_left.drop(repeated_cols_left, axis=1, inplace=True)
-    df_left = pd.merge(df_ca_left, df_cm, how='left', on=['registration_number'], suffixes=('', '_y'))
-    df_left.drop(['vat_number', 'vhe_code', 'vhe_number'], axis=1, inplace=True)
-    # print(df_ca_left.head(10), '\n', null_analysis(df_ca_left), '\n', df_ca_left['registration_number'].nunique())
-    # print(df_left.head(10), '\n', null_analysis(df_left), '\n', df_left['registration_number'].nunique(), '\n', df_left.shape)
-
-    if os.path.isfile(output_file):
-        os.remove(output_file)
-    df_left.to_csv(output_file)
-
-
-def crp_db_merge(file2, file4, file6, file8, file9):
-    print('Merging CRP DBs...')
-    output_file = 'sql_db/' + 'BI_CRP_Sales.csv'
-
-    df_vhe = pd.read_csv(file2, delimiter=';', encoding='latin-1', parse_dates=['slr_document_date'], infer_datetime_format=True)
-    df_pse = pd.read_csv(file4, delimiter=';', encoding='latin-1', parse_dates=['slr_document_date', 'vehicle_in_date', 'registration_date'], infer_datetime_format=True, low_memory=False)
-    df_dw_vhe = pd.read_csv(file6, delimiter=';', encoding='latin-1', parse_dates=['slr_document_date'], infer_datetime_format=True)
-    df_dw_pse = pd.read_csv(file8, delimiter=';', encoding='latin-1', parse_dates=['slr_document_date', 'vehicle_in_date', 'registration_date'], infer_datetime_format=True)
-    df_cm = cm_crp_cleanup(file9)
-
-    df_vhe = df_cleanup(df_vhe, vhe=1)
-    df_pse = df_cleanup(df_pse, pse=1)
-    df_dw_pse = df_cleanup(df_dw_pse, pse=1)
-    df_dw_vhe = df_cleanup(df_dw_vhe, vhe=1)
-
-    df_pse_total = pd.concat([df_pse, df_dw_pse])
-    df_vhe_total = pd.concat([df_vhe, df_dw_vhe])
-
-    # df_ca = pd.merge(df_pse_total, df_vhe_total, on=['registration_number', 'slr_account'], suffixes=('', '_y'))
-    # repeated_cols = [x for x in list(df_ca) if '_y' in x]
-    # df_ca.drop(repeated_cols, axis=1, inplace=True)
-    # df = pd.merge(df_ca, df_cm, on=['registration_number'], suffixes=('', '_y'))
-    # df.drop(['vat_number', 'vhe_code', 'vhe_number'], axis=1, inplace=True)
-    # print(df_ca.head(10), '\n', null_analysis(df_ca), '\n', df_ca['registration_number'].nunique())
-    # print(df.head(10), '\n', null_analysis(df), '\n', df['registration_number'].nunique(), '\n', df.shape)
-
-    ######
-    df_ca_left = pd.merge(df_pse_total, df_vhe_total, how='left', on=['registration_number', 'slr_account'], suffixes=('', '_y'))
-    repeated_cols_left = [x for x in list(df_ca_left) if '_y' in x]
-    df_ca_left.drop(repeated_cols_left, axis=1, inplace=True)
-    df_left = pd.merge(df_ca_left, df_cm, how='left', on=['chassis_number'], suffixes=('', '_y'))
-    df_left.drop(['vat_number', 'vhe_code', 'vhe_number'], axis=1, inplace=True)
-    # print(df_ca_left.head(10), '\n', null_analysis(df_ca_left), '\n', df_ca_left.shape)
-    # print(df_left.head(10), '\n', null_analysis(df_left), '\n', '\n', df_left.shape)
-
-    if os.path.isfile(output_file):
-        os.remove(output_file)
-    df_left.to_csv(output_file)
-
-
 def cm_crp_cleanup(file):
     df = pd.read_csv(file, delimiter=',', encoding='latin-1', header=None, parse_dates=[4, 5], infer_datetime_format=True, dayfirst=True)
-    df = df.rename(columns={1: 'chassis_number', 4: 'cm_date_start', 5: 'cm_date_end'})
-    df.drop([0, 2, 3], axis=1, inplace=True)
+    df = df.rename(columns={1: 'chassis_number', 2: 'cm_months', 3: 'cm_km', 4: 'cm_date_start', 5: 'cm_date_end'})
+    df['cm_years'] = df['cm_months'] * 1. / 12
+    df.drop([0, 'cm_months'], axis=1, inplace=True)
     # df = pd.read_csv('sql_db/' + 'cm_bmw_mini_alt.csv', index_col=0, usecols=['Unnamed: 0', 'chassis_number', 'cm_date_start', 'cm_date_end'], parse_dates = ['cm_date_start', 'cm_date_end'], dayfirst = True, infer_datetime_format = True)
     # print(null_analysis(df))
     # print(df.head())
@@ -323,14 +243,13 @@ def db_concat():
     print('Concatenating CA and CRP DBs...')
 
     dtypes = {'nlr_code': int, 'slr_account': str, 'kms': int}
-    # , 'anos_viatura': int, 'soldbygsc': int
     parse_dates = ['vehicle_in_date', 'registration_date', 'cm_date_start', 'cm_date_end']
 
     db_ca = pd.read_csv('sql_db/' + 'ca_merged.csv', index_col=0, dtype=dtypes, parse_dates=parse_dates, infer_datetime_format=True)
     db_crp = pd.read_csv('sql_db/' + 'crp_merged.csv', index_col=0, dtype=dtypes, parse_dates=parse_dates, infer_datetime_format=True)
 
     # Filling for non-available data of CRP db
-    db_crp['cm_years'], db_crp['cm_km'] = 0, 0
+    # db_crp['cm_years'], db_crp['cm_km'] = 0, 0
 
     db = pd.concat([db_ca, db_crp], ignore_index=True, sort=False)
     first_cols = ['customer', 'slr_document_account', 'registration_number']
@@ -371,12 +290,10 @@ def main():
     if cm_toyota_lexus_cleanup:
         cm_ca_cleanup(file10)
     if ca_merge:
-        # ca_db_merge(file1, file3, file5, file7, file10)
-        # ca_db_merge_alt(file11, file13)
+        ca_db_merge_alt(file11, file13)
         ca_cm_merge(file10)
     if crp_merge:
-        # crp_db_merge(file2, file4, file6, file8, file9)
-        # crp_db_merge_alt(file12, file14)
+        crp_db_merge_alt(file12, file14)
         crp_cm_merge(file9)
 
     db_concat()

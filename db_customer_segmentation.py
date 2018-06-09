@@ -4,11 +4,13 @@ import numpy as np
 import re
 import sys
 from db_analysis import null_analysis
+from datetime import datetime, timedelta
 # -*- coding: 'latin-1' -*-
 pd.set_option('display.expand_frame_repr', False)
 
 
 def main():
+    start = time.time()
     warranty_years_ca = 5
     warranty_years_crp = 2
 
@@ -16,52 +18,145 @@ def main():
     parse_dates = ['vehicle_in_date', 'registration_date', 'cm_date_start', 'cm_date_end']
 
     df = pd.read_csv('sql_db/' + 'db.csv', index_col=0, parse_dates=parse_dates, dtype=dtypes)
-    print(df.head(50))
-    print(df[df['customer'] == '2.0'].shape)
+
+    # db_creation(df, warranty_years_ca, warranty_years_crp)
+    db_creation_alt(df, warranty_years_ca, warranty_years_crp)
+
+    print('Runnning time: %.2f' % (time.time() - start), 'seconds')
 
 
-def warranty_visits(db, pse_sales, vhe_sales, cm_toyota_lexus, cm_bmw_mini, warranty_years_ca, warranty_years_crp):
-    start = time.time()
-    print('Number of warranty visits...')
+def db_creation(df, warranty_years_ca, warranty_years_crp):
+    print('Creating DB fields...')
 
-    vhe_sold_by_gsc = pse_sales[pse_sales['soldbygsc'] == 1]['registration_number'].unique()
-    warranties_in, warranties_out = [], []
-    # for registration_number in db.index.get_level_values(1):
-    for registration_number in vhe_sold_by_gsc:
+    df['warranty_visit'], df['contract_visit'], df['regular_percentage'], df['abandoned'] = 0, 0, 0, 0
+    df_grouped = df.groupby(['customer', 'registration_number'])
+
+    ### Predefined values:
+    df.loc[df['registration_date'].isnull(), 'warranty_visit'] = 'NULL'
+    df.loc[df['vehicle_in_date'].isnull(), ['warranty_visit', 'contract_visit', 'abandoned']] = 'NULL'
+    df.loc[df['cm_date_end'].isnull(), 'contract_visit'] = 'NULL'
+
+    current_datetime = datetime.now()
+    for key, group in df_grouped:
         start = time.time()
-        vhe = vhe_sales[vhe_sales['registration_number'] == registration_number]
-        if vhe['nlr_code'].head(1).values == 101:
+
+        if group['nlr_code'].head(1).values == 101:
             warranty_years = warranty_years_ca
-        else:
+        if group['nlr_code'].head(1).values == 701:
             warranty_years = warranty_years_crp
-        pse = pse_sales[pse_sales['registration_number'] == registration_number]
 
-        # print('\n', vhe, '\n', vhe.shape, '\n', pse, '\n', pse.shape)
+        for key_line, line in group.iterrows():
+            ### Warranty Visit?
+            value_warranty = line['vehicle_in_date'] < line['registration_date'] + np.timedelta64(365 * warranty_years, 'D')
+            if value_warranty:
+                df.loc[df.index == key_line, 'warranty_visit'] = 1
 
-        try:
-            date_sold = list(vhe['slr_document_date'].values)[0]
-            date_warranty_limit = date_sold + np.timedelta64(365 * warranty_years, 'D')
+            ### Contract Visit?
+            value_contract = line['vehicle_in_date'] < line['cm_date_end']
+            if value_contract:
+                df.loc[df.index == key_line, 'contract_visit'] = 1
 
-            pse = pse[pse['slr_document_date'] >= date_sold]
-            warranty_count_in = pse[pse['slr_document_date'] <= date_warranty_limit].shape[0]
-            warranty_count_out = pse[pse['slr_document_date'] > date_warranty_limit].shape[0]
+        ## Regular Percentage
+        time_since_bought = current_datetime - group['registration_date'].head(1)
+        time_since_bought_years = time_since_bought.dt.days/365.25
+        expected_visits = list(time_since_bought_years)[0] - 1
+        if str(expected_visits) == 'nan':
+            regular_percentage = 'NULL'
+        if expected_visits < 1:
+            regular_percentage = '<2year'
+        if expected_visits >= 1:
+            regular_percentage = group.shape[0] * 1. / expected_visits * 100
+        df.loc[(df['customer'] == key[0]) & (df['registration_number'] == key[1]), 'regular_percentage'] = regular_percentage
 
-        except IndexError:
-            # print('empty date')
-            warranty_count_in, warranty_count_out = 'NaN', 'NaN'
+        ## Abandoned?
+        group_copy = group['vehicle_in_date'].sort_values()
+        time_since_last_visit = current_datetime - group_copy.tail(1)
+        time_since_last_visit_years = time_since_last_visit.dt.days/365.25
+        if list(time_since_last_visit_years.values)[0] > 2:
+            df.loc[(df['customer'] == key[0]) & (df['registration_number'] == key[1]), 'abandoned'] = 1
 
-        # print(warranty_count_in, warranty_count_out)
-        print('Running time: %.2f' % (time.time() - start), 'seconds')
-        warranties_in.append(warranty_count_in)
-        warranties_out.append(warranty_count_out)
+        print(time.time() - start)
+    df.to_csv('output/' + 'db_customer_segmentation.csv')
 
 
-    print(len(warranties_in), len(warranties_out))
+def time_last_visit(x, current_datetime):
+    time_since_last_visit = current_datetime - x['vehicle_in_date'].tail(1)
+    time_since_last_visit_years = time_since_last_visit.dt.days / 365.25
 
-    db['visits_in_warranty'] = warranties_in
-    db['visits_out_warranty'] = warranties_out
+    if list(time_since_last_visit_years.values)[0] <= 2:
+        return 0
+    elif list(time_since_last_visit_years.values)[0] > 2:
+        return 1
+    else:
+        return 'NULL'
 
-    print('Running time: %.2f' % (time.time() - start), 'seconds')
+    # return pd.Series(all)
+
+
+def regular_percent(x, current_datetime):
+
+    time_since_bought = current_datetime - x['registration_date'].head(1)
+    time_since_bought_years = time_since_bought.dt.days / 365.25
+    expected_visits = list(time_since_bought_years)[0] - 1
+    if str(expected_visits) == 'nan':
+        return 'NULL'
+    if expected_visits < 1:
+        return '<2years'
+    if expected_visits >= 1:
+        regular_percentage = (x.shape[0] * 1. / expected_visits * 100)
+        if regular_percentage > 100:  # Case when a client comes more than the expected number of times
+            regular_percentage = 100
+            print(expected_visits, x.shape[0], regular_percentage)
+        return regular_percentage
+
+    # return regular_percentage
+
+
+def db_creation_alt(df, warranty_years_ca, warranty_years_crp):
+    print('Creating DB fields...')
+    start = time.time()
+    current_datetime = datetime.now()
+
+    df['warranty_visit'], df['contract_visit'], df['regular_percentage'], df['abandoned'] = 0, 0, 0, 0
+    df.sort_values(by=['vehicle_in_date'], inplace=True)
+    df_grouped = df.groupby(['customer', 'registration_number'], as_index=False)
+
+    ### Predefined values:
+    df.loc[df['registration_date'].isnull(), 'warranty_visit'] = 'NULL'
+    df.loc[df['vehicle_in_date'].isnull(), ['warranty_visit', 'contract_visit', 'abandoned']] = 'NULL'
+    df.loc[df['cm_date_end'].isnull(), 'contract_visit'] = 'NULL'
+    print('1', time.time() - start)
+
+    ### Warranty Visit?
+    df_ca = df[df['nlr_code'] == 101]
+    df_ca.loc[df_ca['vehicle_in_date'] < (df_ca['registration_date'] + np.timedelta64(365 * warranty_years_ca, 'D')), 'warranty_visit'] = 1
+
+    df_crp = df[df['nlr_code'] == 701]
+    df_crp.loc[df_crp['vehicle_in_date'] < (df_crp['registration_date'] + np.timedelta64(365 * warranty_years_crp, 'D')), 'warranty_visit'] = 1
+
+    df_all = pd.concat([df_ca, df_crp])
+    print('2', time.time() - start)
+
+    ### Contract Visit?
+    df_all.loc[df_all['vehicle_in_date'] < df_all['cm_date_end'], 'contract_visit'] = 1
+    print('3', time.time() - start)
+
+    ### Abandonded?
+    something = df_grouped.apply(time_last_visit, current_datetime=current_datetime)
+    df_all = df_all.merge(something.to_frame(), on=['customer', 'registration_number'])
+    df_all.drop(['abandoned'], axis=1, inplace=True)
+    df_all = df_all.rename(columns={0: 'abandoned'})
+    print('4', time.time() - start)
+
+    ### Regular Percentage?
+    something_2 = df_grouped.apply(regular_percent, current_datetime=current_datetime)
+    df_all = df_all.merge(something_2.to_frame(), on=['customer', 'registration_number'])
+    df_all.drop(['regular_percentage'], axis=1, inplace=True)
+    df_all = df_all.rename(columns={0: 'regular_percentage'})
+    print('5', time.time() - start)
+
+    df_all.to_csv('output/' + 'db_customer_segmentation.csv')
+    print('end', time.time() - start)
 
 
 if __name__ == '__main__':
