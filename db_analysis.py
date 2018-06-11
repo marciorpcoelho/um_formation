@@ -31,6 +31,12 @@ def zero_analysis(df):
     print(tab_info)
 
 
+def save_csv(df, name):
+    if os.path.isfile(name):
+        os.remove(name)
+    df.to_csv(name)
+
+
 def const_col_removal(df):
 
     list_before = list(df)

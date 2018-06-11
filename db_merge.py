@@ -3,7 +3,7 @@ import time
 import os
 import numpy as np
 import sys
-from db_analysis import null_analysis
+from db_analysis import null_analysis, save_csv
 pd.set_option('display.expand_frame_repr', False)
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -119,11 +119,13 @@ def df_cleanup(df, pse=0, vhe=0):
     return df
 
 
-def ca_db_merge_alt(file11, file13):
+def ca_db_merge(file11, file13):
     print('Merging CA DBs...')
 
-    df_ca = pd.read_csv(file11, delimiter=';', encoding='utf-8', dtype={'Chassis_Number': str, 'Registration_Number': str, 'Customer': str}, parse_dates=['Vehicle_In_Date', 'Registration_Date'], infer_datetime_format=True)
-    df_dw_ca = pd.read_csv(file13, delimiter=';', encoding='utf-8', dtype={'Chassis_Number': str, 'Registration_Number': str}, parse_dates=['Vehicle_In_Date', 'Registration_Date'], infer_datetime_format=True)
+    # df_ca = pd.read_csv(file11, delimiter=';', encoding='utf-8', dtype={'Chassis_Number': str, 'Registration_Number': str, 'Customer': str}, parse_dates=['Vehicle_In_Date', 'Registration_Date'], infer_datetime_format=True)
+    # df_dw_ca = pd.read_csv(file13, delimiter=';', encoding='utf-8', dtype={'Chassis_Number': str, 'Registration_Number': str}, parse_dates=['Vehicle_In_Date', 'Registration_Date'], infer_datetime_format=True)
+    df_ca = pd.read_csv(file11, delimiter=';', encoding='utf-8', dtype={'Chassis_Number': str, 'Registration_Number': str, 'Customer': str}, parse_dates=['Vehicle_In_Date', 'Registration_Date_PSE', 'Registration_Date_VHE'], infer_datetime_format=True)
+    df_dw_ca = pd.read_csv(file13, delimiter=';', encoding='utf-8', dtype={'Chassis_Number': str, 'Registration_Number': str}, parse_dates=['Vehicle_In_Date', 'Registration_Date_PSE', 'Registration_Date_VHE'], infer_datetime_format=True)
 
     dfs = [df_ca, df_dw_ca]
     for df in dfs:
@@ -140,6 +142,8 @@ def ca_db_merge_alt(file11, file13):
     df_ca_grouped = df_ca_concat.groupby(['registration_number'])
     # df_ca['customer'] = df_ca_grouped['customer'].transform(lambda x: 'No values to aggregate' if pd.isnull(x).all() == True else x.fillna(method='ffill').fillna(method='bfill'))
     df_ca['customer'] = df_ca_grouped['customer'].transform(lambda x: x.fillna(method='ffill').fillna(method='bfill'))
+    df_ca['registration_date_pse'] = df_ca_grouped['registration_date_pse'].transform(lambda x: x.fillna(method='ffill').fillna(method='bfill'))
+    df_ca['registration_date_vhe'] = df_ca_grouped['registration_date_vhe'].transform(lambda x: x.fillna(method='ffill').fillna(method='bfill'))
 
     # output_file = 'sql_db/' + 'ca.csv'
     save_csv(df_ca, 'sql_db/' + 'ca.csv')
@@ -148,16 +152,10 @@ def ca_db_merge_alt(file11, file13):
     # df_ca.to_csv(output_file)
 
 
-def save_csv(df, name):
-    if os.path.isfile(name):
-        os.remove(name)
-    df.to_csv(name)
-
-
 def ca_cm_merge(file10):
     print('Adding CA CM DBs...')
 
-    df = pd.read_csv('sql_db/' + 'ca.csv', index_col=0, parse_dates=['vehicle_in_date', 'registration_date'], infer_datetime_format=True)
+    df = pd.read_csv('sql_db/' + 'ca.csv', index_col=0, parse_dates=['vehicle_in_date', 'registration_date_pse', 'registration_date_vhe'], infer_datetime_format=True)
     df_cm = cm_ca_cleanup(file10)
 
     df_merged = pd.merge(df, df_cm, how='left', on=['registration_number'], suffixes=('', '_y'))
@@ -167,15 +165,13 @@ def ca_cm_merge(file10):
     save_csv(df_merged, 'sql_db/' + 'ca_merged.csv')
 
 
-def crp_db_merge_alt(file12, file14):
+def crp_db_merge(file12, file14):
     print('Merging CRP DBs...')
 
-    # df_ca = pd.read_csv(file11, delimiter=';', encoding='latin-1')
-    # print(df_ca.head())
-    df_crp = pd.read_csv(file12, delimiter=';', dtype={'Chassis_Number': str, 'Registration_Number': str, 'Customer': str}, parse_dates=['Vehicle_In_Date', 'Registration_Date'], infer_datetime_format=True)
-    df_dw_crp = pd.read_csv(file14, delimiter=';', dtype={'Chassis_Number': str, 'Registration_Number': str, 'Customer': str}, parse_dates=['Vehicle_In_Date', 'Registration_Date'], infer_datetime_format=True)
-    # print(df_dw_ca.head())
-    # print(null_analysis(df_dw_ca))
+    # df_crp = pd.read_csv(file12, delimiter=';', dtype={'Chassis_Number': str, 'Registration_Number': str, 'Customer': str}, parse_dates=['Vehicle_In_Date', 'Registration_Date'], infer_datetime_format=True)
+    df_crp = pd.read_csv(file12, delimiter=';', dtype={'Chassis_Number': str, 'Registration_Number': str, 'Customer': str}, parse_dates=['Vehicle_In_Date', 'Registration_Date_PSE', 'Registration_Date_VHE'], infer_datetime_format=True)
+    # df_dw_crp = pd.read_csv(file14, delimiter=';', dtype={'Chassis_Number': str, 'Registration_Number': str, 'Customer': str}, parse_dates=['Vehicle_In_Date', 'Registration_Date'], infer_datetime_format=True)
+    df_dw_crp = pd.read_csv(file14, delimiter=';', dtype={'Chassis_Number': str, 'Registration_Number': str, 'Customer': str}, parse_dates=['Vehicle_In_Date', 'Registration_Date_PSE', 'Registration_Date_VHE'], infer_datetime_format=True)
 
     dfs = [df_crp, df_dw_crp]
     for df in dfs:
@@ -192,6 +188,9 @@ def crp_db_merge_alt(file12, file14):
     df_crp_grouped = df_crp_concat.groupby('registration_number')
     # df_crp['customer'] = df_crp_grouped['customer'].transform(lambda x: 'No values to aggregate' if pd.isnull(x).all() == True else x.fillna(method='ffill').fillna(method='bfill'))
     df_crp['customer'] = df_crp_grouped['customer'].apply(lambda x: x.ffill().bfill())
+    df_crp['registration_date_pse'] = df_crp_grouped['registration_date_pse'].apply(lambda x: x.ffill().bfill())
+    df_crp['registration_date_vhe'] = df_crp_grouped['registration_date_vhe'].apply(lambda x: x.ffill().bfill())
+
 
     # output_file = 'sql_db/' + 'crp.csv'
     # if os.path.isfile(output_file):
@@ -202,7 +201,7 @@ def crp_db_merge_alt(file12, file14):
 
 def crp_cm_merge(file9):
     print('Adding CRP CM DBs...')
-    df = pd.read_csv('sql_db/' + 'crp.csv', index_col=0, parse_dates=['vehicle_in_date', 'registration_date'], infer_datetime_format=True)
+    df = pd.read_csv('sql_db/' + 'crp.csv', index_col=0, parse_dates=['vehicle_in_date', 'registration_date_pse', 'registration_date_vhe'], infer_datetime_format=True)
     df_cm = cm_crp_cleanup(file9)
 
     df_merged = pd.merge(df, df_cm, how='left', on=['chassis_number'], suffixes=('', '_y'))
@@ -243,7 +242,7 @@ def db_concat():
     print('Concatenating CA and CRP DBs...')
 
     dtypes = {'nlr_code': int, 'slr_account': str, 'kms': int}
-    parse_dates = ['vehicle_in_date', 'registration_date', 'cm_date_start', 'cm_date_end']
+    parse_dates = ['vehicle_in_date', 'registration_date_pse', 'registration_date_vhe', 'cm_date_start', 'cm_date_end']
 
     db_ca = pd.read_csv('sql_db/' + 'ca_merged.csv', index_col=0, dtype=dtypes, parse_dates=parse_dates, infer_datetime_format=True)
     db_crp = pd.read_csv('sql_db/' + 'crp_merged.csv', index_col=0, dtype=dtypes, parse_dates=parse_dates, infer_datetime_format=True)
@@ -272,10 +271,14 @@ def main():
     file8 = 'sql_db/' + 'BI_DW_CRP_PSE_Sales.csv'
     file9 = 'sql_db/' + 'BSI_2018053000.txt'  # Contratos de Manutenção BMW/Mini
     file10 = 'sql_db/' + 'contratos_manutencao_toyota_lexus.csv'
-    file11 = 'sql_db/' + 'ca_pse.csv'
-    file12 = 'sql_db/' + 'crp_pse.csv'
-    file13 = 'sql_db/' + 'dw_ca_pse.csv'
-    file14 = 'sql_db/' + 'dw_crp_pse.csv'
+    # file11 = 'sql_db/' + 'ca_pse.csv'
+    file11 = 'sql_db/' + 'ca_vhe_dates.csv'
+    # file12 = 'sql_db/' + 'crp_pse.csv'
+    file12 = 'sql_db/' + 'crp_vhe_dates.csv'
+    # file13 = 'sql_db/' + 'dw_ca_pse.csv'
+    file13 = 'sql_db/' + 'dw_ca_vhe_dates.csv'
+    # file14 = 'sql_db/' + 'dw_crp_pse.csv'
+    file14 = 'sql_db/' + 'dw_crp_vhe_dates.csv'
 
     vhe_sales = 0
     pse_sales = 0
@@ -290,13 +293,14 @@ def main():
     if cm_toyota_lexus_cleanup:
         cm_ca_cleanup(file10)
     if ca_merge:
-        ca_db_merge_alt(file11, file13)
+        ca_db_merge(file11, file13)
         ca_cm_merge(file10)
     if crp_merge:
-        crp_db_merge_alt(file12, file14)
+        crp_db_merge(file12, file14)
         crp_cm_merge(file9)
 
-    db_concat()
+    if not ca_merge and not crp_merge:
+        db_concat()
     print('\n', time.time() - start)
 
 
