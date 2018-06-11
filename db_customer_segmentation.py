@@ -113,21 +113,21 @@ def db_creation(df, warranty_years_ca, warranty_years_crp):
     df_all = df_all.rename(columns={0: 'abandoned'})
     print('4th step done at %.2f' % (time.time() - start))
 
-    ### Regular Percentage? - PSE
-    something_2 = df_grouped.apply(regular_percent_pse, current_datetime=current_datetime)
-    df_all = df_all.merge(something_2.to_frame(), on=['customer', 'registration_number'])
-    df_all.drop(['regular_percentage_pse'], axis=1, inplace=True)
-    df_all = df_all.rename(columns={0: 'regular_percentage_pse'})
-    print('5th step done at %.2f' % (time.time() - start))
+    # ### Regular Percentage? - PSE
+    # something_2 = df_grouped.apply(regular_percent_pse, current_datetime=current_datetime)
+    # df_all = df_all.merge(something_2.to_frame(), on=['customer', 'registration_number'])
+    # df_all.drop(['regular_percentage_pse'], axis=1, inplace=True)
+    # df_all = df_all.rename(columns={0: 'regular_percentage_pse'})
+    # print('5th step done at %.2f' % (time.time() - start))
+    #
+    # ### Regular Percentage? - VHE
+    # something_3 = df_grouped.apply(regular_percent_vhe, current_datetime=current_datetime)
+    # df_all = df_all.merge(something_3.to_frame(), on=['customer', 'registration_number'])
+    # df_all.drop(['regular_percentage_vhe'], axis=1, inplace=True)
+    # df_all = df_all.rename(columns={0: 'regular_percentage_vhe'})
+    # print('6th step done at %.2f' % (time.time() - start))
 
-    ### Regular Percentage? - VHE
-    something_3 = df_grouped.apply(regular_percent_vhe, current_datetime=current_datetime)
-    df_all = df_all.merge(something_3.to_frame(), on=['customer', 'registration_number'])
-    df_all.drop(['regular_percentage_vhe'], axis=1, inplace=True)
-    df_all = df_all.rename(columns={0: 'regular_percentage_vhe'})
-    print('6th step done at %.2f' % (time.time() - start))
-
-    save_csv(df_all, 'output/' + 'db_customer_segmentation.csv')
+    save_csv(df_all, 'output/' + 'db_customer_segmentation_short.csv')
 
 if __name__ == '__main__':
     main()

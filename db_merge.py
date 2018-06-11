@@ -8,50 +8,6 @@ pd.set_option('display.expand_frame_repr', False)
 pd.options.mode.chained_assignment = None  # default='warn'
 
 
-def vhe_sales_merge(*args):
-    print('Merging VHE Sales across CA and CRP from DW and Current...')
-    output_file = 'sql_db/' + 'BI_VHE_Sales.csv'
-
-    dfs = []
-    for file in args:
-        df = pd.read_csv(file, delimiter=';', encoding='latin-1', parse_dates=['slr_document_date'], infer_datetime_format=True)
-        dfs.append(df)
-
-    df = pd.concat(dfs)
-
-    df.dropna(inplace=True)  # Since i don't know yet which columns are import for future matching, i'll just remove all NaN's. If some of the columns with NaN's are not relevant, then it is better to remove them, in order have more available data
-    df.columns = map(str.lower, df.columns)
-    df['registration_number'] = df['registration_number'].str.replace('-', '')
-    df.drop(['vhe_code', 'vhe_number'], axis=1, inplace=True)
-
-    if os.path.isfile(output_file):
-        os.remove(output_file)
-    df.to_csv(output_file)
-
-
-def pse_sales_merge(*args):
-    print('Merging PSE Sales across CA and CRP from DW and Current...')
-    output_file = 'sql_db/' + 'BI_PSE_Sales.csv'
-
-    dfs = []
-    for file in args:
-        df = pd.read_csv(file, delimiter=';', encoding='latin-1', parse_dates=['SLR_Document_Date', 'Vehicle_In_Date', 'Registration_Date'], infer_datetime_format=True, dtype={'nlr_code': object, 'Registration_Number': str, 'SLR_Document_Account': str, 'VAT_Number': object, 'PT_Franchise_Desc': str, 'PT_Model_Desc': str, 'PT_Sales_Type_Service_Level_1_Desc': str, 'PT_Sales_Type_Service_Level_2_Desc': str, 'slr_account': str, 'Chassis_Number': str})
-        dfs.append(df)
-
-    df = pd.concat(dfs)
-    df.drop(['Anos_Viatura'], axis=1, inplace=True)  # I don't think i'll need this column, as i can just calculate it myself and it has over 27% missing info.
-    df.dropna(inplace=True)  # Since i don't know yet which columns are import for future matching, i'll just remove all NaN's. If some of the columns with NaN's are not relevant, then it is better to remove them, in order have more available data
-    df.columns = map(str.lower, df.columns)
-    df['registration_number'] = df['registration_number'].str.replace('-', '')
-
-    df = chassis_strip(df)
-
-    if os.path.isfile(output_file):
-        os.remove(output_file)
-    df = pse_sales_cleanup(df)
-    df.to_csv(output_file)
-
-
 def chassis_strip(df):
 
     rows = []
@@ -78,47 +34,6 @@ def pse_sales_cleanup(df):
     return df
 
 
-def cm_ca_cleanup(file):
-    df = pd.read_csv(file, delimiter=';', parse_dates=['DATA_INICIO', 'DATA_FIM', 'DATA_REMOCAO'], infer_datetime_format=True, usecols=['MATRICULA', 'ANOS', 'KILOMETROS', 'DATA_INICIO', 'DATA_FIM', 'DATA_REMOCAO', 'VIA_MAR_DES'])
-    df = df.rename(columns={'MATRICULA': 'registration_number', 'ANOS': 'cm_years', 'KILOMETROS': 'cm_km', 'DATA_INICIO': 'cm_date_start', 'DATA_FIM': 'cm_date_end', 'DATA_REMOCAO': 'cm_date_removal', 'VIA_MAR_DES': 'pt_franchise_desc'})
-
-    # df = df[df['registration_number'].apply(lambda x: len(x) == 6)]
-
-    # Replacing end_date by end_removal when the second exists:
-    df.update(pd.DataFrame({'cm_date_end': df['cm_date_removal']}))
-    df.drop(['cm_date_removal'], axis=1, inplace=True)
-    df.drop(['pt_franchise_desc'], axis=1, inplace=True)
-
-    return df
-
-
-def df_cleanup(df, pse=0, vhe=0):
-
-    df.columns = map(str.lower, df.columns)
-    df.dropna(subset=['registration_number'], axis=0, inplace=True)
-    df.dropna(subset=['slr_account'], axis=0, inplace=True)
-    df.dropna(subset=['registration_number', 'slr_account'], axis=0, inplace=True)
-    df['registration_number'] = df['registration_number'].str.replace('-', '')
-    df.drop(df[df['slr_account'] == 4].index, axis=0, inplace=True)
-    df.drop(df[df['slr_account'] == 6].index, axis=0, inplace=True)
-    # df.drop(df[df['slr_account'] == 0].index, axis=0, inplace=True)
-    # df.drop(df[df['slr_account'] == 1].index, axis=0, inplace=True)
-    df.drop(df[df['registration_number'] == 0].index, axis=0, inplace=True)
-    df.drop(df[df['registration_number'] == '++++++'].index, axis=0, inplace=True)
-    df.drop(df[df['registration_number'] == '000001'].index, axis=0, inplace=True)
-    df = df[df['registration_number'].apply(lambda x: len(x) == 6)]
-    df.rename(columns={'(no column name)': 'total'}, inplace=True)
-    if pse:
-        df = df[df['total'] > 0]
-        df.drop('chassis_number', axis=1, inplace=True)
-        df.drop('pt_model_desc', axis=1, inplace=True)
-    if vhe:
-        df.rename(columns={'slr_document_date': 'vhe_sold_date'}, inplace=True)
-        df = chassis_strip(df)
-
-    return df
-
-
 def ca_db_merge(file11, file13):
     print('Merging CA DBs...')
 
@@ -126,6 +41,10 @@ def ca_db_merge(file11, file13):
     # df_dw_ca = pd.read_csv(file13, delimiter=';', encoding='utf-8', dtype={'Chassis_Number': str, 'Registration_Number': str}, parse_dates=['Vehicle_In_Date', 'Registration_Date'], infer_datetime_format=True)
     df_ca = pd.read_csv(file11, delimiter=';', encoding='utf-8', dtype={'Chassis_Number': str, 'Registration_Number': str, 'Customer': str}, parse_dates=['Vehicle_In_Date', 'Registration_Date_PSE', 'Registration_Date_VHE'], infer_datetime_format=True)
     df_dw_ca = pd.read_csv(file13, delimiter=';', encoding='utf-8', dtype={'Chassis_Number': str, 'Registration_Number': str}, parse_dates=['Vehicle_In_Date', 'Registration_Date_PSE', 'Registration_Date_VHE'], infer_datetime_format=True)
+
+    # print(df_ca['SLR_Document_Date'].min(), df_ca['SLR_Document_Date'].max())
+    # print(df_dw_ca['SLR_Document_Date'].min(), df_dw_ca['SLR_Document_Date'].max())
+    # sys.exit()
 
     dfs = [df_ca, df_dw_ca]
     for df in dfs:
@@ -139,17 +58,23 @@ def ca_db_merge(file11, file13):
 
     df_ca_concat = pd.concat(dfs, ignore_index=True)
 
+    # print(df_ca_concat[df_ca_concat['registration_number'] == '98IQ85'])
+    # sys.exit()
+
     df_ca_grouped = df_ca_concat.groupby(['registration_number'])
+    # print(df_ca_concat['slr_document_date'].min(), df_ca_concat['slr_document_date'].max())
+
     # df_ca['customer'] = df_ca_grouped['customer'].transform(lambda x: 'No values to aggregate' if pd.isnull(x).all() == True else x.fillna(method='ffill').fillna(method='bfill'))
-    df_ca['customer'] = df_ca_grouped['customer'].transform(lambda x: x.fillna(method='ffill').fillna(method='bfill'))
-    df_ca['registration_date_pse'] = df_ca_grouped['registration_date_pse'].transform(lambda x: x.fillna(method='ffill').fillna(method='bfill'))
-    df_ca['registration_date_vhe'] = df_ca_grouped['registration_date_vhe'].transform(lambda x: x.fillna(method='ffill').fillna(method='bfill'))
+    df_ca_concat['customer'] = df_ca_grouped['customer'].transform(lambda x: x.fillna(method='ffill').fillna(method='bfill'))
+    df_ca_concat['registration_date_pse'] = df_ca_grouped['registration_date_pse'].transform(lambda x: x.fillna(method='ffill').fillna(method='bfill'))
+    # df_ca['registration_date_vhe'] = df_ca_grouped['registration_date_vhe'].transform(lambda x: x.fillna(method='ffill').fillna(method='bfill'))
+
+    # print(df_ca_concat[df_ca_concat['registration_number'] == '98IQ85'])
+    # sys.exit()
+    # print(df_ca_concat['slr_document_date'].min(), df_ca_concat['slr_document_date'].max())
 
     # output_file = 'sql_db/' + 'ca.csv'
-    save_csv(df_ca, 'sql_db/' + 'ca.csv')
-    # if os.path.isfile(output_file):
-    #     os.remove(output_file)
-    # df_ca.to_csv(output_file)
+    save_csv(df_ca_concat, 'sql_db/' + 'ca.csv')
 
 
 def ca_cm_merge(file10):
@@ -163,6 +88,20 @@ def ca_cm_merge(file10):
     df_merged.drop(repeated_cols_left, axis=1, inplace=True)
 
     save_csv(df_merged, 'sql_db/' + 'ca_merged.csv')
+
+
+def cm_ca_cleanup(file):
+    df = pd.read_csv(file, delimiter=';', parse_dates=['DATA_INICIO', 'DATA_FIM', 'DATA_REMOCAO'], infer_datetime_format=True, usecols=['MATRICULA', 'ANOS', 'KILOMETROS', 'DATA_INICIO', 'DATA_FIM', 'DATA_REMOCAO', 'VIA_MAR_DES'])
+    df = df.rename(columns={'MATRICULA': 'registration_number', 'ANOS': 'cm_years', 'KILOMETROS': 'cm_km', 'DATA_INICIO': 'cm_date_start', 'DATA_FIM': 'cm_date_end', 'DATA_REMOCAO': 'cm_date_removal', 'VIA_MAR_DES': 'pt_franchise_desc'})
+
+    # df = df[df['registration_number'].apply(lambda x: len(x) == 6)]
+
+    # Replacing end_date by end_removal when the second exists:
+    df.update(pd.DataFrame({'cm_date_end': df['cm_date_removal']}))
+    df.drop(['cm_date_removal'], axis=1, inplace=True)
+    df.drop(['pt_franchise_desc'], axis=1, inplace=True)
+
+    return df
 
 
 def crp_db_merge(file12, file14):
@@ -184,19 +123,17 @@ def crp_db_merge(file12, file14):
         df = registration_number_flag(df)
 
     df_crp_concat = pd.concat(dfs, ignore_index=True)
+    # print(df_crp_concat['slr_document_date'].min(), df_crp_concat['slr_document_date'].max())
 
     df_crp_grouped = df_crp_concat.groupby('registration_number')
     # df_crp['customer'] = df_crp_grouped['customer'].transform(lambda x: 'No values to aggregate' if pd.isnull(x).all() == True else x.fillna(method='ffill').fillna(method='bfill'))
-    df_crp['customer'] = df_crp_grouped['customer'].apply(lambda x: x.ffill().bfill())
-    df_crp['registration_date_pse'] = df_crp_grouped['registration_date_pse'].apply(lambda x: x.ffill().bfill())
-    df_crp['registration_date_vhe'] = df_crp_grouped['registration_date_vhe'].apply(lambda x: x.ffill().bfill())
+    df_crp_concat['customer'] = df_crp_grouped['customer'].apply(lambda x: x.ffill().bfill())
+    df_crp_concat['registration_date_pse'] = df_crp_grouped['registration_date_pse'].apply(lambda x: x.ffill().bfill())
+    # df_crp['registration_date_vhe'] = df_crp_grouped['registration_date_vhe'].apply(lambda x: x.ffill().bfill())
 
+    # print(df_crp_concat['slr_document_date'].min(), df_crp_concat['slr_document_date'].max())
 
-    # output_file = 'sql_db/' + 'crp.csv'
-    # if os.path.isfile(output_file):
-    #     os.remove(output_file)
-    # df_crp.to_csv(output_file)
-    save_csv(df_crp, 'sql_db/' + 'crp.csv')
+    save_csv(df_crp_concat, 'sql_db/' + 'crp.csv')
 
 
 def crp_cm_merge(file9):
