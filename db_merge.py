@@ -3,7 +3,7 @@ import time
 import os
 import numpy as np
 import sys
-from db_analysis import null_analysis, save_csv
+from db_tools import null_analysis, save_csv
 pd.set_option('display.expand_frame_repr', False)
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -208,27 +208,14 @@ def main():
     file8 = 'sql_db/' + 'BI_DW_CRP_PSE_Sales.csv'
     file9 = 'sql_db/' + 'BSI_2018053000.txt'  # Contratos de Manutenção BMW/Mini
     file10 = 'sql_db/' + 'contratos_manutencao_toyota_lexus.csv'
-    # file11 = 'sql_db/' + 'ca_pse.csv'
     file11 = 'sql_db/' + 'ca_vhe_dates.csv'
-    # file12 = 'sql_db/' + 'crp_pse.csv'
     file12 = 'sql_db/' + 'crp_vhe_dates.csv'
-    # file13 = 'sql_db/' + 'dw_ca_pse.csv'
     file13 = 'sql_db/' + 'dw_ca_vhe_dates.csv'
-    # file14 = 'sql_db/' + 'dw_crp_pse.csv'
     file14 = 'sql_db/' + 'dw_crp_vhe_dates.csv'
 
-    vhe_sales = 0
-    pse_sales = 0
-    cm_toyota_lexus_cleanup = 0
     ca_merge = 0
     crp_merge = 0
 
-    if vhe_sales:
-        vhe_sales_merge(file1, file2, file5, file6)
-    if pse_sales:
-        pse_sales_merge(file3, file4, file7, file8)
-    if cm_toyota_lexus_cleanup:
-        cm_ca_cleanup(file10)
     if ca_merge:
         ca_db_merge(file11, file13)
         ca_cm_merge(file10)

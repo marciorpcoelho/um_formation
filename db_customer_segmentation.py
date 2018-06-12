@@ -3,8 +3,8 @@ import time
 import numpy as np
 import re
 import sys
-from db_analysis import null_analysis, save_csv
-from datetime import datetime, timedelta
+from db_tools import null_analysis, save_csv
+from datetime import datetime
 # -*- coding: 'latin-1' -*-
 pd.set_option('display.expand_frame_repr', False)
 
@@ -129,6 +129,7 @@ def db_creation(df, warranty_years_ca, warranty_years_crp):
     # print('6th step done at %.2f' % (time.time() - start), 'seconds')
 
     save_csv(df_all, 'output/' + 'db_customer_segmentation_short.csv')
+
 
 if __name__ == '__main__':
     main()

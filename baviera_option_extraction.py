@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import nltk
 import sys
-from db_analysis import null_analysis
+from db_tools import null_analysis
 import time
 import os
 pd.set_option('display.expand_frame_repr', False)
