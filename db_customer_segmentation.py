@@ -79,7 +79,8 @@ def db_creation(df, warranty_years_ca, warranty_years_crp):
     start = time.time()
     current_datetime = datetime.now()
 
-    df['warranty_visit_pse'], df['warranty_visit_vhe'], df['contract_visit'], df['regular_percentage_pse'], df['regular_percentage_vhe'], df['abandoned'] = 0, 0, 0, 0, 0, 0
+    df['warranty_visit_pse'], df['warranty_visit_vhe'], df['contract_visit'], df['abandoned'] = 0, 0, 0, 0
+    # df['regular_percentage_pse'], df['regular_percentage_vhe'] = 0, 0
     df.sort_values(by=['vehicle_in_date'], inplace=True)
     df_grouped = df.groupby(['customer', 'registration_number'], as_index=False)
 
@@ -87,7 +88,7 @@ def db_creation(df, warranty_years_ca, warranty_years_crp):
     df.loc[df['registration_date_pse'].isnull(), 'warranty_visit_pse'], df.loc[df['registration_date_vhe'].isnull(), 'warranty_visit_vhe'] = 'NULL', 'NULL'
     df.loc[df['vehicle_in_date'].isnull(), ['warranty_visit_pse', 'warranty_visit_vhe', 'contract_visit', 'abandoned']] = 'NULL'
     df.loc[df['cm_date_end'].isnull(), 'contract_visit'] = 'NULL'
-    print('1st step done at %.2f' % (time.time() - start))
+    print('1st step done at %.2f' % (time.time() - start), 'seconds')
 
     ### Warranty Visit?
     df_ca = df[df['nlr_code'] == 101]
@@ -99,33 +100,33 @@ def db_creation(df, warranty_years_ca, warranty_years_crp):
     df_crp.loc[df_crp['vehicle_in_date'] < (df_crp['registration_date_vhe'] + np.timedelta64(365 * warranty_years_crp, 'D')), 'warranty_visit_vhe'] = 1
 
     df_all = pd.concat([df_ca, df_crp])
-    print('2nd step done at %.2f' % (time.time() - start))
+    print('2nd step done at %.2f' % (time.time() - start), 'seconds')
 
     ### Contract Visit?
     # df_all.loc[df_all['vehicle_in_date'] < df_all['cm_date_end'], 'contract_visit'] = 1
     df_all.loc[(df_all['vehicle_in_date'] <= df_all['cm_date_end']) & (df_all['anos_viatura'] <= df_all['cm_years']) & (df_all['kms'] <= df_all['cm_km']), 'contract_visit'] = 1
-    print('3rd step done at %.2f' % (time.time() - start))
+    print('3rd step done at %.2f' % (time.time() - start), 'seconds')
 
     ### Abandonded?
     something = df_grouped.apply(time_last_visit, current_datetime=current_datetime)
     df_all = df_all.merge(something.to_frame(), on=['customer', 'registration_number'])
     df_all.drop(['abandoned'], axis=1, inplace=True)
     df_all = df_all.rename(columns={0: 'abandoned'})
-    print('4th step done at %.2f' % (time.time() - start))
+    print('4th step done at %.2f' % (time.time() - start), 'seconds')
 
     # ### Regular Percentage? - PSE
     # something_2 = df_grouped.apply(regular_percent_pse, current_datetime=current_datetime)
     # df_all = df_all.merge(something_2.to_frame(), on=['customer', 'registration_number'])
     # df_all.drop(['regular_percentage_pse'], axis=1, inplace=True)
     # df_all = df_all.rename(columns={0: 'regular_percentage_pse'})
-    # print('5th step done at %.2f' % (time.time() - start))
+    # print('5th step done at %.2f' % (time.time() - start), 'seconds')
     #
     # ### Regular Percentage? - VHE
     # something_3 = df_grouped.apply(regular_percent_vhe, current_datetime=current_datetime)
     # df_all = df_all.merge(something_3.to_frame(), on=['customer', 'registration_number'])
     # df_all.drop(['regular_percentage_vhe'], axis=1, inplace=True)
     # df_all = df_all.rename(columns={0: 'regular_percentage_vhe'})
-    # print('6th step done at %.2f' % (time.time() - start))
+    # print('6th step done at %.2f' % (time.time() - start), 'seconds')
 
     save_csv(df_all, 'output/' + 'db_customer_segmentation_short.csv')
 
