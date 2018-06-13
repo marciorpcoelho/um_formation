@@ -10,6 +10,14 @@ from sklearn.decomposition import FactorAnalysis
 from gap_statistic import OptimalK
 from xlsxwriter.workbook import Workbook
 
+'''
+    File name: db_tools.py
+    Author: Márcio Coelho
+    Date created: 30/05/2018
+    Date last modified: 01/06/2018
+    Python Version: 3.6
+'''
+
 
 def null_analysis(df):
     # Displays the number and percentage of null values in the DF

@@ -19,10 +19,6 @@ pd.set_option('display.expand_frame_repr', False)
 
 
 def db_creation(df):
-    # df.dropna(inplace=True)
-
-    # df = df.head(1000)  #ToDo: don't forget to remove this line to access all DB
-
     df['Opcional'] = df['Opcional'].str.lower()
     df['Cor'] = df['Cor'].str.lower()
     df['Interior'] = df['Interior'].str.lower()

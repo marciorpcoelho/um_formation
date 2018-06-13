@@ -8,6 +8,14 @@ from datetime import datetime
 # -*- coding: 'latin-1' -*-
 pd.set_option('display.expand_frame_repr', False)
 
+'''
+    File name: db_customer_segmentation.py
+    Author: Márcio Coelho
+    Date created: 30/05/2018
+    Date last modified: 01/06/2018
+    Python Version: 3.6
+'''
+
 
 def main():
     start = time.time()

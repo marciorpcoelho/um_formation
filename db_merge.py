@@ -7,6 +7,14 @@ from db_tools import null_analysis, save_csv
 pd.set_option('display.expand_frame_repr', False)
 pd.options.mode.chained_assignment = None  # default='warn'
 
+'''
+    File name: db_merge.py
+    Author: Márcio Coelho
+    Date created: 30/05/2018
+    Date last modified: 01/06/2018
+    Python Version: 3.6
+'''
+
 
 def chassis_strip(df):
 
@@ -225,6 +233,7 @@ def main():
 
     if not ca_merge and not crp_merge:
         db_concat()
+
     print('\n', time.time() - start)
 
 

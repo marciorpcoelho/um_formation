@@ -21,11 +21,15 @@
       <w>contratos</w>
       <w>csvfile</w>
       <w>custo</w>
+      <w>dataset</w>
+      <w>dateset</w>
       <w>dianteiro</w>
       <w>dianteiros</w>
       <w>encomenda</w>
       <w>estacionamento</w>
       <w>ffill</w>
+      <w>graphviz</w>
+      <w>groundtruth</w>
       <w>inicio</w>
       <w>iterrows</w>
       <w>jantes</w>
@@ -46,6 +50,7 @@
       <w>opcionais</w>
       <w>opcional</w>
       <w>optimalk</w>
+      <w>oversample</w>
       <w>percentagem</w>
       <w>pintura</w>
       <w>prata</w>
@@ -53,6 +58,8 @@
       <w>preto</w>
       <w>preço</w>
       <w>remocao</w>
+      <w>resampled</w>
+      <w>resamples</w>
       <w>runnning</w>
       <w>scaler</w>
       <w>sensores</w>
