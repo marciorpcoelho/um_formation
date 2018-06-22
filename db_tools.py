@@ -3,12 +3,15 @@ import numpy as np
 import os
 import glob
 import csv
+import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_selection import SelectKBest, mutual_info_regression
 from sklearn.decomposition import FactorAnalysis
 from gap_statistic import OptimalK
 from xlsxwriter.workbook import Workbook
+
+my_dpi = 96
 
 '''
     File name: db_tools.py
@@ -45,6 +48,35 @@ def save_csv(df, name):
     if os.path.isfile(name):
         os.remove(name)
     df.to_csv(name)
+
+
+def save_fig(name, save_dir='output/'):
+    # Saves plot in at least two formats, png and pdf
+    plt.savefig(save_dir + str(name) + '.pdf')
+    plt.savefig(save_dir + str(name) + '.png')
+
+
+def value_count_histogram(df, column, name, output_dir='output/'):
+    plt.subplots(figsize=(1000 / my_dpi, 600 / my_dpi), dpi=my_dpi)
+    counts = df[column].value_counts().values
+    values = df[column].value_counts().index
+    rects = plt.bar(values, counts)
+
+    # plt.tight_layout()
+    plt.xlabel('Values')
+    plt.xticks(rotation=30)
+    plt.ylabel('Counts')
+    plt.title('Distribution for column - ' + column)
+    bar_plot_auto_label(rects)
+    save_fig(name, output_dir)
+    plt.show()
+
+
+def bar_plot_auto_label(rects):
+
+    for rect in rects:
+        height = rect.get_height()
+        plt.text(rect.get_x() + rect.get_width()/2., 1.05*height, '%d' % int(height), ha='center', va='bottom')
 
 
 def const_col_removal(df):

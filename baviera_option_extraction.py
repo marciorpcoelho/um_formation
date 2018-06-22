@@ -7,6 +7,7 @@ import sys
 from db_tools import null_analysis
 import time
 import os
+from db_tools import save_csv
 pd.set_option('display.expand_frame_repr', False)
 
 '''
@@ -28,23 +29,13 @@ def db_creation(df):
 
     df = symbol_replacer(df)
 
-    # features to check:
-    # tamanho das jantes, DONE
-    # sensores de estacionamento dianteiros, DONE
-    # Navegação, DONE
-    # Cor, DONE
-    # Interior, DONE
-    # Caixa Automatica, DONE
     df['Navegação'], df['Sensores'], df['Cor_Interior'], df['Caixa Auto'], df['Cor_Exterior'], df['Jantes'] = 0, 0, 0, 0, 0, 0  # New Columns
     colors_pt = ['preto', 'branco', 'azul', 'vermelho', 'cinza', 'cinzento', 'prateado', 'prata', 'amarelo', 'laranja', 'castanho', 'dourado', 'antracit', 'antracite/preto', 'antracite/cinza/preto', 'antracito', 'dakota', 'antracite', 'antracite/vermelho/preto', 'oyster/preto', 'prata/preto/preto', 'âmbar/preto/pr', 'terra', 'preto/laranja', 'cognac/preto', 'bronze', 'beige', 'veneto/preto', 'zagora/preto', 'mokka/preto', 'taupe/preto', 'sonoma/preto', 'preto/preto']
     colors_en = ['black', 'white', 'blue', 'red', 'grey', 'silver', 'orange', 'green', 'bluestone', 'aqua', 'burgundy', 'anthrazit', 'truffle', 'brown', 'oyster', 'tobacco', 'jatoba', 'storm', 'champagne', 'cedar', 'silverstone', 'chestnut', 'kaschmirsilber', 'oak', 'mokka']
     # Que cor é esta? ['sparkling', 'storm', 'metalizada', 'brilhante']
 
     df_grouped = df.groupby('Nº Stock')
-    count = 0
     for key, group in df_grouped:
-        count += 1
-        # print(key, count)
         ### Navegação/Sensor/Transmissão
         for line_options in group['Opcional']:
             tokenized_options = nltk.word_tokenize(line_options)
@@ -89,8 +80,6 @@ def db_creation(df):
             color_interior = ['preto']
 
         if not color_interior:
-            # print('Color not found:', tokenized_interior)
-            # if tokenized_interior == ['tecido']:
             continue
 
         if len(color_interior) > 1:
@@ -121,7 +110,6 @@ def db_creation(df):
             df.loc[df['Modelo'] == line_modelo, 'Modelo'] = ' '.join(tokenized_modelo[:-3])
 
     df.loc[df['Jantes'] == 0, 'Jantes'] = 'standard'
-    # df.to_csv('output/' + 'baviera.csv')
     return df
 
 
@@ -170,7 +158,7 @@ def db_score_calculation(df):
 
 
 def db_duplicate_removal(df):
-    cols_to_drop = ['Prov', 'CdCor', 'Cor', 'CdInt', 'Interior', 'Versão', 'Opcional', 'A', 'S', 'Custo', 'Data Compra', 'Data Venda', 'Vendedor', 'Canal de Venda']
+    cols_to_drop = ['CdCor', 'Cor', 'CdInt', 'Interior', 'Versão', 'Opcional', 'A', 'S', 'Custo', 'Data Compra', 'Data Venda', 'Vendedor', 'Canal de Venda']
     # Will probably need to also remove: stock_days, stock_days_norm, and one of the scores
     df = df.drop_duplicates(subset='Nº Stock')
     df.drop(cols_to_drop, axis=1, inplace=True)
@@ -195,15 +183,17 @@ def main():
     df_second_step = db_color_replacement(df_initial)
     df_third_step = db_score_calculation(df_second_step)
     df_final = db_duplicate_removal(df_third_step)
-    df_final.to_csv(full_db)
 
-    if os.path.isfile(stock_opt_db):
-        os.remove(stock_opt_db)
-    df_final[['Modelo', 'Local da Venda', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'Tipo Encomenda', 'stock_days', 'Margem']].to_csv(stock_opt_db)
+    sel_cols = ['Modelo', 'Local da Venda', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'Tipo Encomenda', 'stock_days', 'Margem']
+    # if os.path.isfile(stock_opt_db):
+    #     os.remove(stock_opt_db)
+    df_final[['Modelo', 'Prov', 'Local da Venda', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'Tipo Encomenda', 'stock_days', 'Margem']].to_csv(stock_opt_db)
+    save_csv(df_final[sel_cols], stock_opt_db)
 
-    if os.path.isfile(full_db):
-        os.remove(full_db)
-    df_final.to_csv(full_db)
+    # if os.path.isfile(full_db):
+    #     os.remove(full_db)
+    # df_final.to_csv(full_db)
+    save_csv(df_final, full_db)
 
     print('Runnning time: %.2f' % (time.time() - start))
 
