@@ -1,29 +1,36 @@
 import pandas as pd
 import numpy as np
 import sys
+import csv
+import os
+import re
 import time
 import pydotplus
 import matplotlib.pyplot as plt
 from sklearn import tree
+from io import StringIO
 from imblearn.over_sampling import RandomOverSampler
 from db_tools import value_count_histogram
 from test_06 import ClassFit
 from test_04 import ohe
 from sklearn.tree import export_graphviz
-
 pd.set_option('display.expand_frame_repr', False)
+my_dpi = 96
 
 
 def main():
     start = time.time()
 
-    target = ['stock_class2']
+    prov_and_tipo_enc = 0
     group_cols = 1
+    target = ['score_class']
+    # possible targets = ['stock_class1', 'stock_class2', 'margem_class1', 'score_class']
+
     oversample = 1
-    sales_place_models = 1
+    sales_place_models = 0
 
     if not sales_place_models:
-        stock_optimization(group_cols, oversample, target)
+        stock_optimization(group_cols, oversample, target, prov_and_tipo_enc)
     if sales_place_models:
         stock_optimization_sales_place(group_cols, oversample, target)
     # customer_segmentation()
@@ -31,24 +38,38 @@ def main():
     print('Running Time: %.2f' % (time.time() - start))
 
 
-def stock_optimization(group_cols, oversample, target_column):
-    dtypes = {'Modelo': str, 'Local da Venda': str, 'Tipo Encomenda': str, 'Margem': float, 'Navegação': int, 'Sensores': int, 'Cor_Interior': str, 'Caixa Auto': int, 'Cor_Exterior': str, 'Jantes': str, 'stock_days': int, 'margem_percentagem': float}
+def stock_optimization(group_cols, oversample, target_column, prov_and_tipo_enc):
+    targets = ['margem_percentagem', 'Margem', 'stock_days']
+    start = time.time()
+
+    if prov_and_tipo_enc:
+        dtypes = {'Modelo': str, 'Prov': str, 'Local da Venda': str, 'Tipo Encomenda': str, 'Margem': float, 'Navegação': int, 'Sensores': int, 'Cor_Interior': str, 'Caixa Auto': int, 'Cor_Exterior': str, 'Jantes': str, 'stock_days': int, 'margem_percentagem': float}
+        cols_to_use = ['Unnamed: 0', 'Modelo', 'Prov', 'Local da Venda', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'Tipo Encomenda', 'stock_days', 'Margem', 'margem_percentagem']
+        ohe_cols = ['Jantes', 'Cor_Interior', 'Cor_Exterior', 'Local da Venda', 'Modelo', 'Prov', 'Tipo Encomenda']
+        if group_cols:
+            ohe_cols = ['Jantes_new', 'Cor_Interior_new', 'Cor_Exterior_new', 'Local da Venda_new', 'Modelo_new', 'Tipo Encomenda_new', 'Prov_new']
+
+    elif not prov_and_tipo_enc:
+        dtypes = {'Modelo': str, 'Local da Venda': str, 'Margem': float, 'Navegação': int, 'Sensores': int, 'Cor_Interior': str, 'Caixa Auto': int, 'Cor_Exterior': str, 'Jantes': str, 'stock_days': int, 'margem_percentagem': float}
+        cols_to_use = ['Unnamed: 0', 'Modelo', 'Local da Venda', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'stock_days', 'Margem', 'margem_percentagem']
+        ohe_cols = ['Jantes', 'Cor_Interior', 'Cor_Exterior', 'Local da Venda', 'Modelo']
+        if group_cols:
+            ohe_cols = ['Jantes_new', 'Cor_Interior_new', 'Cor_Exterior_new', 'Local da Venda_new', 'Modelo_new']
 
     if group_cols:
         print('Grouping small count values')
+    if prov_and_tipo_enc:
+        print('Using Prov and Tipo Encomenda columns')
 
-    df = pd.read_csv('output/' + 'db_baviera_stock_optimization.csv', encoding='utf-8', delimiter=',', index_col=0, dtype=dtypes)
+    df = pd.read_csv('output/' + 'db_baviera_stock_optimization.csv', usecols=cols_to_use, encoding='utf-8', delimiter=',', index_col=0, dtype=dtypes)
+    df, targets = db_score_calculation(df, targets)
 
     if group_cols:
-        # ohe_cols = ['Prov_new', 'Jantes_new', 'Cor_Interior_new', 'Cor_Exterior_new', 'Tipo Encomenda_new', 'Local da Venda', 'Modelo']
-        ohe_cols = ['Jantes_new', 'Cor_Interior_new', 'Cor_Exterior_new', 'Local da Venda_new', 'Modelo_new']
-        col_group(df)
-    elif not group_cols:
-        ohe_cols = ['Prov', 'Jantes', 'Cor_Interior', 'Cor_Exterior', 'Tipo Encomenda', 'Local da Venda', 'Modelo']
+        col_group(df, prov_and_tipo_enc)
 
-    class_creation(df)
+    targets += class_creation(df)
     df = ohe(df, ohe_cols)
-    df = target_cols_removal(df)
+    df = target_cols_removal(df, target_column, targets)
     df_train_x, df_train_y, df_test_x, df_test_y = dataset_split(df, target_column, oversample)
 
     tuned_parameters_dt = [{'min_samples_leaf': [3, 5, 7, 9, 10, 15, 20, 50], 'max_depth': [3, 5, 7, 9], 'class_weight': ['balanced']}]
@@ -61,8 +82,23 @@ def stock_optimization(group_cols, oversample, target_column):
 
     feat_importance = dt_best.feature_importances_
 
-    performance_evaluation(dt, dt_best, df_train_x, df_train_y, df_test_x, df_test_y)
-    feature_importance_graph(list(df_train_x), feat_importance)
+    name = tag(group_cols, prov_and_tipo_enc, target_column)
+    feature_importance_graph(list(df_train_x), feat_importance, name)
+    feature_importance_csv(list(df_train_x), feat_importance, name)
+    performance_evaluation(dt, dt_best, df_train_x, df_train_y, df_test_x, df_test_y, name, start)
+
+
+def db_score_calculation(df, targets):
+    df['stock_days_norm'] = (df['stock_days'] - df['stock_days'].min()) / (df['stock_days'].max() - df['stock_days'].min())
+    df['inv_stock_days_norm'] = 1 - df['stock_days_norm']
+
+    df['margem_percentagem_norm'] = (df['margem_percentagem'] - df['margem_percentagem'].min()) / (df['margem_percentagem'].max() - df['margem_percentagem'].min())
+    df['score'] = df['inv_stock_days_norm'] * df['margem_percentagem_norm']
+
+    df.drop(['stock_days_norm', 'inv_stock_days_norm', 'margem_percentagem_norm'], axis=1, inplace=True)
+    targets += ['score']
+
+    return df, targets
 
 
 def stock_optimization_sales_place(group_cols, oversample, target_column):
@@ -90,7 +126,7 @@ def stock_optimization_sales_place(group_cols, oversample, target_column):
         df = target_cols_removal(df)
         df_train_x, df_train_y, df_test_x, df_test_y = dataset_split(df, target_column, oversample)
 
-        tuned_parameters_dt = [{'min_samples_leaf': [3, 5, 7, 9, 10, 15, 20, 50], 'max_depth': [3, 5, 7, 9], 'class_weight': ['balanced']}]
+        tuned_parameters_dt = [{'min_samples_leaf': [3, 5, 7, 9, 10, 15, 20, 50], 'max_depth': [3, 5], 'class_weight': ['balanced']}]
         dt = ClassFit(clf=tree.DecisionTreeClassifier)
         dt.grid_search(parameters=tuned_parameters_dt, k=10)
         dt.clf_fit(x=df_train_x, y=df_train_y)
@@ -113,9 +149,9 @@ def customer_segmentation():
     print(df.head())
 
 
-def decision_tree_plot(clf, output_dir, value, df_train_x, oversample):
+def decision_tree_plot(clf, output_dir, tag, df_train_x, oversample):
     print('Plotting Decision Tree...')
-    file_name = str(value) + '_decision_tree'
+    file_name = str(tag) + '_decision_tree'
     if oversample:
         file_name += '_oversampled'
 
@@ -124,13 +160,16 @@ def decision_tree_plot(clf, output_dir, value, df_train_x, oversample):
     graph.write_pdf(output_dir + file_name + '.pdf')
 
 
-def target_cols_removal(df):
+def target_cols_removal(df, target, targets_to_remove):
 
-    df.drop('margem_percentagem', axis=1, inplace=True)
-    df.drop('stock_days', axis=1, inplace=True)
-    df.drop('Margem', axis=1, inplace=True)
-    df.drop('margem_class1', axis=1, inplace=True)
-    df.drop('stock_class1', axis=1, inplace=True)
+    targets_to_remove.remove(target[0])
+    for value in targets_to_remove:
+        df.drop(value, axis=1, inplace=True)
+
+    # df.drop('margem_percentagem', axis=1, inplace=True)
+    # df.drop('stock_days', axis=1, inplace=True)
+    # df.drop('Margem', axis=1, inplace=True)
+    # df.drop('margem_class1', axis=1, inplace=True)
 
     return df
 
@@ -143,12 +182,7 @@ def oversample_data(train_x, train_y):
     return pd.DataFrame(np.atleast_2d(train_x_resampled), columns=list(train_x)), pd.Series(train_y_resampled.tolist())
 
 
-def col_group(df):
-    # Prov
-    # column_grouping(df, column='Prov', values_to_keep=['Novos', 'Demonstração'])
-    # value_count_histogram(df, 'Prov', 'prov_before')
-    # value_count_histogram(df, 'Prov_new', 'prov_after')
-
+def col_group(df, prov_and_tipo_enc):
     # Cor_Exterior
     column_grouping(df, column='Cor_Exterior', values_to_keep=['preto', 'cinzento', 'branco', 'azul'])
     # value_count_histogram(df, 'Cor_Exterior', 'cor_exterior_before')
@@ -158,11 +192,6 @@ def col_group(df):
     column_grouping(df, column='Cor_Interior', values_to_keep=['preto', 'antracite', 'dakota', 'antracite/cinza/preto'])
     # value_count_histogram(df, 'Cor_Interior', 'cor_interior_before')
     # value_count_histogram(df, 'Cor_Interior_new', 'cor_interior_after')
-
-    # Tipo Encomenda
-    # column_grouping(df, column='Tipo Encomenda', values_to_keep=['Enc Client Final', 'Encomenda Stock'])
-    # value_count_histogram(df, 'Tipo Encomenda', 'tipo_encomenda_before')
-    # value_count_histogram(df, 'Tipo Encomenda_new', 'tipo_encomenda_after')
 
     # Jantes
     column_grouping(df, column='Jantes', values_to_keep=['standard', '17', '18', '19'])
@@ -179,10 +208,22 @@ def col_group(df):
     # value_count_histogram(df, 'Local da Venda', 'local_da_venda_before')
     # value_count_histogram(df, 'Local da Venda_new', 'local_da_venda_after')
 
-    df.drop('Prov', axis=1, inplace=True)
+    if prov_and_tipo_enc:
+        # Prov
+        column_grouping(df, column='Prov', values_to_keep=['Novos', 'Demonstração'])
+        # value_count_histogram(df, 'Prov', 'prov_before')
+        # value_count_histogram(df, 'Prov_new', 'prov_after')
+
+        # Tipo Encomenda
+        column_grouping(df, column='Tipo Encomenda', values_to_keep=['Enc Client Final', 'Encomenda Stock'])
+        # value_count_histogram(df, 'Tipo Encomenda', 'tipo_encomenda_before')
+        # value_count_histogram(df, 'Tipo Encomenda_new', 'tipo_encomenda_after')
+
+        df.drop('Prov', axis=1, inplace=True)
+        df.drop('Tipo Encomenda', axis=1, inplace=True)
+
     df.drop('Cor_Exterior', axis=1, inplace=True)
     df.drop('Cor_Interior', axis=1, inplace=True)
-    df.drop('Tipo Encomenda', axis=1, inplace=True)
     df.drop('Jantes', axis=1, inplace=True)
     df.drop('Modelo', axis=1, inplace=True)
     df.drop('Local da Venda', axis=1, inplace=True)
@@ -276,6 +317,15 @@ def class_creation(df):
     df.loc[(df['margem_percentagem'] > 0.206) & (df['margem_percentagem'] <= 0.349), 'margem_class1'] = 1
     df.loc[df['margem_percentagem'] > 0.349, 'margem_class1'] = 0
 
+    # 4 Classes:
+    df.loc[(df['score'] >= 0) & (df['score'] < 0.25), 'score_class'] = 0
+    df.loc[(df['score'] >= 0.25) & (df['score'] < 0.50), 'score_class'] = 1
+    df.loc[(df['score'] >= 0.50) & (df['score'] <= 0.75), 'score_class'] = 2
+    df.loc[(df['score'] >= 0.75), 'score_class'] = 3
+
+    new_targets_created = ['stock_class1', 'stock_class2', 'margem_class1', 'score_class']
+    return new_targets_created
+
 
 def dataset_split(df, target, oversample):
     print('Splitting dataset...')
@@ -297,21 +347,67 @@ def dataset_split(df, target, oversample):
     return df_train_x, df_train_y, df_test_x, df_test_y
 
 
-def feature_importance_graph(features, feature_importance):
+def tag(group_cols, prov_and_tipo_enc, target):
+
+    file_name = '_target' + str(target[0])
+    if group_cols:
+        file_name += '_group_cols'
+    if prov_and_tipo_enc:
+        file_name += '_prov_and_type'
+
+    return file_name
+
+
+def feature_importance_csv(features, feature_importance, name):
+    indices = np.argsort(feature_importance)[::-1]
+
+    file_name = 'feature_importance_'
+    file_name += name
+
+    if os.path.isfile('output/' + file_name + '.csv'):
+        os.remove('output/' + file_name + '.csv')
+
+    with open('output/' + file_name + '.csv', 'a', newline='') as csvfile:
+        fieldnames = ['Rank', 'Feature', 'Importance']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        for f in range(len(features)):
+            writer.writerow({'Rank': f + 1, 'Feature': features[indices[f]], 'Importance': feature_importance[indices[f]]})
+
+
+def feature_importance_graph(features, feature_importance, name):
     print('Plotting Feature Importance...')
 
-    indices = np.argsort(feature_importance)[::-1]
-    for f in range(len(indices)):
-        print('%d. feature %d - %s (%f)' % (f + 1, indices[f], features[indices[f]], feature_importance[indices[f]]))
+    file_name = 'feature_importance_'
+    file_name += name
+
+    if os.path.isfile('output/' + file_name + 'png'):
+        os.remove('output/' + file_name + '.png')
 
     d = {'feature': features, 'importance': feature_importance}
     feat_importance_df = pd.DataFrame(data=d)
     feat_importance_df.sort_values(ascending=False, by='importance', inplace=True)
 
-    print(feat_importance_df[feat_importance_df['importance'] > 0.01])
+    # top_features = feat_importance_df[feat_importance_df['importance'] > 0.01]
+    top_features = feat_importance_df.head(10)
+    print(top_features)
+
+    # plt.figure()
+    plt.subplots(figsize=(1400 / my_dpi, 800 / my_dpi), dpi=my_dpi)
+    plt.title('Top 10 - Feature Importance')
+    plt.bar(range(top_features.shape[0]), top_features['importance'], color='r', align='center', zorder=3)
+    plt.xticks(range(top_features.shape[0]), top_features['feature'], rotation=20)
+    plt.xlim([-1, top_features.shape[0]])
+    plt.xlabel('Features')
+    plt.ylabel('Feature Importance')
+    plt.grid()
+
+    plt.savefig('output/' + file_name + '.png')
+    # plt.show()
+    plt.clf()
+    plt.close()
 
 
-def performance_evaluation(model, best_model, train_x, train_y, test_x, test_y):
+def performance_evaluation(model, best_model, train_x, train_y, test_x, test_y, name, start):
 
     prediction_trainer = best_model.predict(train_x)
     model.grid_performance(prediction=prediction_trainer, y=train_y)
@@ -321,6 +417,38 @@ def performance_evaluation(model, best_model, train_x, train_y, test_x, test_y):
     model.grid_performance(prediction=prediction_test, y=test_y)
     print('Test:')
     print('Micro:', model.micro, '\n', 'Macro:', model.macro, '\n', 'Accuracy:', model.accuracy, '\n', 'Class Report', '\n', model.class_report)
+
+    class_report_csv(model.class_report, name)
+    performance_metrics_csv(model.micro, model.macro, model.accuracy, name, start)
+
+
+def performance_metrics_csv(micro, macro, accuracy, name, start):
+
+    file_name = 'performance_evaluation_'
+    file_name += name
+
+    if os.path.isfile('output/' + file_name + '.csv'):
+        os.remove('output/' + file_name + '.csv')
+
+    # header = 0
+    with open('output/' + file_name + '.csv', 'a', newline='') as csvfile:
+        fieldnames = ['micro_f1', 'macro_f1', 'accuracy', 'running_time']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerow({'micro_f1': micro, 'macro_f1': macro, 'accuracy': accuracy, 'running_time': (time.time() - start)})
+
+
+def class_report_csv(report, name):
+
+    file_name = 'class_report_'
+    file_name += name
+
+    if os.path.isfile('output/' + file_name + '.csv'):
+        os.remove('output/' + file_name + '.csv')
+
+    report = re.sub(r" +", " ", report).replace("avg / total", "avg/total").replace("\n ", "\n")
+    report_df = pd.read_csv(StringIO("Classes" + report), sep=' ', index_col=0)
+    report_df.to_csv('output/' + file_name + '.csv')
 
 
 if __name__ == '__main__':
