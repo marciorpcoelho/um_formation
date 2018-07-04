@@ -3,6 +3,8 @@ import numpy as np
 import os
 import glob
 import csv
+import matplotlib
+import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
@@ -10,14 +12,13 @@ from sklearn.feature_selection import SelectKBest, mutual_info_regression
 from sklearn.decomposition import FactorAnalysis
 from gap_statistic import OptimalK
 from xlsxwriter.workbook import Workbook
-
 my_dpi = 96
 
 '''
     File name: db_tools.py
     Author: Márcio Coelho
     Date created: 30/05/2018
-    Date last modified: 01/06/2018
+    Date last modified: 27/06/2018
     Python Version: 3.6
 '''
 
@@ -69,7 +70,20 @@ def value_count_histogram(df, column, name, output_dir='output/'):
     plt.title('Distribution for column - ' + column)
     bar_plot_auto_label(rects)
     save_fig(name, output_dir)
-    plt.show()
+    # plt.show()
+
+
+def ohe(df, cols):
+
+    for column in cols:
+        uniques = df[column].unique()
+        for value in uniques:
+            new_column = column + '_' + str(value)
+            df[new_column] = 0
+            df.loc[df[column] == str(value), new_column] = 1
+        df.drop(column, axis=1, inplace=True)
+
+    return df
 
 
 def bar_plot_auto_label(rects):
@@ -131,3 +145,64 @@ def unique_chassis_comparison(pse_sales, cm_bmw_mini):
     unique_chassis = pse_sales[pse_sales['nlr_code'] == '701']['chassis_number'].unique()
     print('Number of unique BMW/Mini Cars on PSE_Sales:', pse_sales[pse_sales['nlr_code'] == '701']['chassis_number'].nunique())
     print('Number of common chassis_numbers between PSE_Sales and CM BMW/MINI:', cm_bmw_mini[cm_bmw_mini['chassis_number'].isin(unique_chassis)].shape[0])
+
+
+def graph_component_silhouette(X, n_clusters, lim_x, mat_size, sample_silhouette_values, silhouette_avg, clusters, method, approach, cluster_labels=0, cluster_centers=0):
+    plt.rcParams["patch.force_edgecolor"] = True
+    plt.style.use('fivethirtyeight')
+    matplotlib.rc('patch', edgecolor='dimgray', linewidth=1)
+
+    if cluster_labels.any():
+        fig, (ax1, ax2) = plt.subplots(1, 2)
+        fig.set_size_inches(16, 8)
+    elif not cluster_labels:
+        fig, ax1 = plt.subplots(1, 1)
+        fig.set_size_inches(8, 8)
+
+    ax1.set_xlim([lim_x[0], lim_x[1]])
+    ax1.set_ylim([0, mat_size + (n_clusters + 1) * 10])
+    y_lower = 10
+
+    for i in range(n_clusters):
+        # Aggregate the silhouette scores for samples belonging to cluster i, and sort them
+        ith_cluster_silhouette_values = sample_silhouette_values[clusters == i]
+        ith_cluster_silhouette_values.sort()
+        size_cluster_i = ith_cluster_silhouette_values.shape[0]
+        y_upper = y_lower + size_cluster_i
+        color = cm.nipy_spectral(float(i) / n_clusters)
+        ax1.fill_betweenx(np.arange(y_lower, y_upper), 0, ith_cluster_silhouette_values, facecolor=color, edgecolor=color, alpha=0.8)
+
+        # Label the silhouette plots with their cluster numbers at the middle
+        ax1.text(-0.03, y_lower + 0.5 * size_cluster_i, str(i), color='red', fontweight='bold', bbox=dict(facecolor='white', edgecolor='black', boxstyle='round, pad=0.3'))
+
+        ax1.axvline(x=silhouette_avg, color='white', ls='--', lw=1.0)
+
+        # Compute the new y_lower for next plot
+        y_lower = y_upper + 10
+
+    ax1.set_xlabel("Silhouette Coefficient Values")
+    ax1.set_ylabel("Cluster label")
+
+    if cluster_labels.any():
+        colors = cm.nipy_spectral(cluster_labels.astype(float) / n_clusters)
+        ax2.scatter(X[:, 0], X[:, 1], marker='.', s=30, lw=0, alpha=0.7, c=colors, edgecolor='k')
+
+        # Labeling the clusters
+        centers = cluster_centers
+        # Draw white circles at cluster centers
+        ax2.scatter(centers[:, 0], centers[:, 1], marker='o',c="white", alpha=1, s=200, edgecolor='k')
+
+        for i, c in enumerate(centers):
+            ax2.scatter(c[0], c[1], marker='$%d$' % i, alpha=1,s=50, edgecolor='k')
+
+        # ax2.set_title("The visualization of the clustered data.", fontsize=10)
+        ax2.set_xlabel("Feature space for the 1st feature")
+        ax2.set_ylabel("Feature space for the 2nd feature")
+
+        plt.suptitle(("Silhouette analysis for KMeans clustering on sample data ""with n_clusters = %d" % n_clusters), fontsize=14, fontweight='bold')
+
+    plt.tight_layout()
+    wm = plt.get_current_fig_manager()
+    wm.window.wm_geometry("-1500-100")
+    save_fig('stock_optimization_' + str(approach) + '_' + str(n_clusters) + '_cluster')
+    plt.show()

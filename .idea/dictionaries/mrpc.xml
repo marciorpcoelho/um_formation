@@ -2,7 +2,9 @@
   <dictionary name="mrpc">
     <words>
       <w>adaboost</w>
+      <w>algarve</w>
       <w>amarelo</w>
+      <w>ambar</w>
       <w>anos</w>
       <w>anthrazit</w>
       <w>antracite</w>
@@ -12,8 +14,10 @@
       <w>azul</w>
       <w>banco</w>
       <w>baviera</w>
+      <w>bege</w>
       <w>berlina</w>
       <w>bfill</w>
+      <w>bincenters</w>
       <w>bluestone</w>
       <w>branco</w>
       <w>busi</w>
@@ -25,6 +29,8 @@
       <w>cinza</w>
       <w>cinzento</w>
       <w>cliente</w>
+      <w>clubman</w>
+      <w>coef</w>
       <w>coelho</w>
       <w>coimbrões</w>
       <w>compra</w>
@@ -33,11 +39,15 @@
       <w>csvfile</w>
       <w>custo</w>
       <w>dataset</w>
+      <w>datasets</w>
       <w>dateset</w>
       <w>demonstração</w>
       <w>departamento</w>
       <w>dianteiro</w>
       <w>dianteiros</w>
+      <w>dimgray</w>
+      <w>dourado</w>
+      <w>edgecolor</w>
       <w>empresa</w>
       <w>encom</w>
       <w>encomenda</w>
@@ -48,15 +58,21 @@
       <w>faturado</w>
       <w>feira</w>
       <w>ffill</w>
+      <w>fivethirtyeight</w>
+      <w>fontsize</w>
       <w>frotas</w>
       <w>gaia</w>
       <w>garantia</w>
       <w>graphviz</w>
       <w>groundtruth</w>
+      <w>importances</w>
       <w>inicio</w>
       <w>iterrows</w>
       <w>jantes</w>
+      <w>jatoba</w>
+      <w>joblib</w>
       <w>kilometros</w>
+      <w>kmeans</w>
       <w>laranja</w>
       <w>manutencao</w>
       <w>manutenção</w>
@@ -64,8 +80,11 @@
       <w>margem</w>
       <w>matricula</w>
       <w>metalic</w>
+      <w>minibatchkmeans</w>
       <w>modelo</w>
+      <w>mokka</w>
       <w>motas</w>
+      <w>motociclo</w>
       <w>motociclos</w>
       <w>motorsport</w>
       <w>motos</w>
@@ -89,8 +108,10 @@
       <w>portimão</w>
       <w>prata</w>
       <w>prateado</w>
+      <w>pred</w>
       <w>preto</w>
       <w>preço</w>
+      <w>proba</w>
       <w>proveniencia</w>
       <w>rects</w>
       <w>remocao</w>
@@ -100,8 +121,11 @@
       <w>scaler</w>
       <w>sensores</w>
       <w>serviço</w>
+      <w>silh</w>
+      <w>silverstone</w>
       <w>smth</w>
       <w>soldbygsc</w>
+      <w>sonoma</w>
       <w>série</w>
       <w>tamanho</w>
       <w>tecido</w>
@@ -117,6 +141,7 @@
       <w>venda</w>
       <w>vendas</w>
       <w>vendedor</w>
+      <w>veneto</w>
       <w>vermelho</w>
       <w>versão</w>
       <w>viatura</w>
@@ -124,6 +149,7 @@
       <w>viseu</w>
       <w>visita</w>
       <w>xlsx</w>
+      <w>zagora</w>
     </words>
   </dictionary>
 </component>
