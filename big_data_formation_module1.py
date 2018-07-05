@@ -8,17 +8,18 @@ import time
 import pydotplus
 import matplotlib.pyplot as plt
 from sklearn.model_selection import GridSearchCV
+from sklearn.feature_selection import SelectKBest, chi2, f_classif, mutual_info_classif
 from sklearn import tree, linear_model, ensemble, svm, neighbors
-from io import StringIO
-from imblearn.over_sampling import RandomOverSampler
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
-from db_tools import value_count_histogram, graph_component_silhouette, ohe, null_analysis, save_csv
-from classes import ClassFit, ClusterFit, RegFit
 from sklearn.tree import export_graphviz
 from sklearn.metrics import confusion_matrix
-from sklearn.cluster import KMeans, MiniBatchKMeans, AffinityPropagation, SpectralClustering, Birch
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
+from sklearn.cluster import KMeans, MiniBatchKMeans, AffinityPropagation, SpectralClustering, Birch
+from io import StringIO
+from imblearn.over_sampling import RandomOverSampler
+from db_tools import value_count_histogram, graph_component_silhouette, ohe, null_analysis, save_csv
+from classes import ClassFit, ClusterFit, RegFit
 from collections import Counter
 import warnings
 warnings.filterwarnings('ignore')
@@ -40,6 +41,8 @@ def main():
     sales_place_models = 0
     clustering = 0
     regression = 0
+    score = 'recall'
+    # score = 'f1_weighted'
 
     target = ['score_class']
     if regression:
@@ -54,28 +57,31 @@ def main():
     # model = 'svm'
     # model = 'ab'
     # model = 'gc'
-    model = 'voting'
+    # model = 'voting'
 
     k = 10
+    feat_sel_check = 6
+    models = ['dt', 'rf', 'lr', 'knn', 'svm', 'ab', 'gc', 'voting']
 
-    df, train_x, train_y, test_x, test_y, ohe_cols = database_preparation(oversample, target)
+    for model in models:
+        df, train_x, train_y, test_x, test_y, ohe_cols = database_preparation(oversample, target, feat_sel_check)
 
-    if classification:
-        if sales_place_models:
-            stock_optimization_sales_place(df, target, start, oversample)  # Models by selling location - shouldn't be needed as the sales place should appear high in the tree;
-        if not sales_place_models:
-            stock_optimization_classification(df, model, k, train_x, train_y, test_x, test_y, target, ohe_cols, start, oversample)  # Classification Approach
-    if clustering:
-        stock_optimization_clustering(train_x, train_y, test_x, test_y, method='minibatchkmeans')  # Clustering Approach
-    if regression:
-        stock_optimization_regression(train_x, train_y, test_x, test_y, target)  # Regression Approach
+        if classification:
+            if sales_place_models:
+                stock_optimization_sales_place(df, target, start, oversample)  # Models by selling location - shouldn't be needed as the sales place should appear high in the tree;
+            if not sales_place_models:
+                stock_optimization_classification(df, model, k, score, train_x, train_y, test_x, test_y, target, ohe_cols, start, oversample)  # Classification Approach
+        if clustering:
+            stock_optimization_clustering(train_x, train_y, test_x, test_y, method='minibatchkmeans')  # Clustering Approach
+        if regression:
+            stock_optimization_regression(train_x, train_y, test_x, test_y, target)  # Regression Approach
 
-    # customer_segmentation()
+        # customer_segmentation()
 
-    print('\nRunning Time: %.2f' % (time.time() - start), 'seconds')
+        print('\nRunning Time: %.2f' % (time.time() - start), 'seconds')
 
 
-def database_preparation(oversample, target_column):
+def database_preparation(oversample, target_column, feat_sel_check):
     print('Preparing database...')
 
     targets = ['margem_percentagem', 'Margem', 'stock_days']
@@ -95,47 +101,72 @@ def database_preparation(oversample, target_column):
     df_ohe = ohe(df_ohe, ohe_cols)
     targets.remove(target_column[0])
     non_targets = [x for x in list(df_ohe) if x not in targets]
-    df_train_x, df_train_y, df_test_x, df_test_y = dataset_split(df_ohe[non_targets], target_column, oversample)
+    df_train_x, df_train_y, df_test_x, df_test_y = dataset_split(df_ohe[non_targets], target_column, feat_sel_check, oversample)
+
+    if type(feat_sel_check) == int:
+        df_new = feature_selection(df_train_x, df_train_y, df_test_x, df_test_y, feat_sel_check)
+
+    sys.exit()
 
     return df, df_train_x, df_train_y, df_test_x, df_test_y, ohe_cols
 
 
-def stock_optimization_classification(df, model, k, train_x, train_y, test_x, test_y, target_column, ohe_cols, start, oversample):
+def feature_selection(train_x, train_y, test_x, test_y, feat_sel_check):
+
+    oversample_flag_backup, original_index_backup = train_x['oversample_flag'], train_x['original_index']
+    train_x.drop(['oversample_flag', 'original_index'], axis=1, inplace=True)
+
+    # Not the most efficient way but i need to merge the datasets back together
+    dfs = [train_x, train_y, test_x, test_y]
+    # for df in dfs:
+    #     print(df.shape)
+
+    x = pd.concat([train_x, test_x])
+    y = pd.concat([train_y, test_y['score_class']])
+
+    print('before', x.shape, '\n', list(x))
+    selector = SelectKBest(chi2, k=feat_sel_check).fit(x, y)
+    idxs_selected = selector.get_support(indices=True)
+    df_features_new = list(list(list(x))[i] for i in idxs_selected)
+    x_new = x[df_features_new]
+    print(x_new.shape, '\n', x_new.head())
+    sys.exit()
+
+
+def stock_optimization_classification(df, model, k, score, train_x, train_y, test_x, test_y, target_column, ohe_cols, start, oversample):
     print('Classification Approach...')
-    voting = 0
 
     if oversample:
         oversample_flag_backup, original_index_backup = train_x['oversample_flag'], train_x['original_index']
         train_x.drop(['oversample_flag', 'original_index'], axis=1, inplace=True)
 
-    name = tag(target_column, oversample, 'classification', model)
+    name = tag(target_column, oversample, 'classification', score, model)
 
     if model == 'dt':
-        clf, clf_best = decision_tree(train_x, train_y, k, name)
+        clf, clf_best = decision_tree(train_x, train_y, k, score, name)
     if model == 'rf':
-        clf, clf_best = random_forest(train_x, train_y, k)
+        clf, clf_best = random_forest(train_x, train_y, k, score,)
     if model == 'lr':
-        clf, clf_best = logistic_regression(train_x, train_y, k)
+        clf, clf_best = logistic_regression(train_x, train_y, k, score,)
     if model == 'knn':
-        clf, clf_best = k_nearest_neighbours(train_x, train_y, k)
+        clf, clf_best = k_nearest_neighbours(train_x, train_y, k, score,)
     if model == 'svm':
-        clf, clf_best = support_vector_machine(train_x, train_y, k)
+        clf, clf_best = support_vector_machine(train_x, train_y, k, score,)
     if model == 'ab':
-        clf, clf_best = adaboost_classifier(train_x, train_y, k)
+        clf, clf_best = adaboost_classifier(train_x, train_y, k, score,)
     if model == 'gc':
-        clf, clf_best = gradient_classifier(train_x, train_y, k)
+        clf, clf_best = gradient_classifier(train_x, train_y, k, score,)
     if model == 'voting':
-        clf, clf_best = voting_method(train_x, train_y, k, name)
-        voting = 1
+        clf, clf_best = voting_method(train_x, train_y, k, score, name)
 
-    prediction_trainer, prediction_test = performance_evaluation(clf, clf_best, train_x, train_y, test_x, test_y, name, start, voting)
+    prediction_trainer, prediction_test = performance_evaluation(clf, clf_best, train_x, train_y, test_x, test_y, name, start)
 
     if oversample:
         train_x['oversample_flag'], train_x['original_index'] = oversample_flag_backup, original_index_backup
 
     df_final = prediction_probabilities(clf_best, df, model, train_x, test_x, train_y, test_y, oversample, ohe_cols, prediction_trainer, prediction_test)
     df_new_data = new_columns(df_final)
-    save_csv(df_new_data, 'output/db_final_' + str(model) + '.csv')
+    save_csv(df_new_data, 'output/db_final_' + str(name) + '.csv')
 
 
 def new_columns(df):
@@ -153,39 +184,41 @@ def additional_info(x):
     return x
 
 
-def voting_method(train_x, train_y, k, name):
+def voting_method(train_x, train_y, k, score, name):
+    print('### Voting - Training models... ###')
+
+    _, dt_best = decision_tree(train_x, train_y, k, score, name, voting=1)
+    _, rf_best = random_forest(train_x, train_y, k, score, voting=1)
+    _, lr_best = logistic_regression(train_x, train_y, k, score, voting=1)
+    # _, svm_best = support_vector_machine(train_x, train_y, k, score, voting=1)
+    # _, ab_best = adaboost_classifier(train_x, train_y, k, score, voting=1)
+    _, gc_best = gradient_classifier(train_x, train_y, k, score, voting=1)
+
+    # tuned_parameters = {'voting': ['hard', 'soft']}
+    # vote_clf = GridSearchCV(ensemble.VotingClassifier(estimators=[('dt', dt_best), ('rf', rf_best), ('lr', lr_best), ('gc', gc_best)]), param_grid=tuned_parameters)
+    # vote_clf.fit(train_x, train_y)
+    # vote_clf_best = ensemble.VotingClassifier(estimators=[('dt', dt_best), ('rf', rf_best), ('lr', lr_best), ('gc', gc_best)], voting=vote_clf.best_params_['voting'])
+    # vote_clf_best.fit(train_x, train_y)
+
     print('### Voting ###')
 
-    _, dt_best = decision_tree(train_x, train_y, k, name, voting=1)
-    _, rf_best = random_forest(train_x, train_y, k, voting=1)
-    _, lr_best = logistic_regression(train_x, train_y, k, voting=1)
-    _, svm_best = support_vector_machine(train_x, train_y, k, voting=1)
-    # _, ab_best = adaboost_classifier(train_x, train_y, k, voting=1)
-    _, gc_best = gradient_classifier(train_x, train_y, k, voting=1)
-
-    # voting_clf = ensemble.VotingClassifier(estimators=[('dt', dt_best), ('rf', rf_best), ('lr', lr_best), ('svm', svm), ('gc', gc_best)])
-    # voting_clf = voting_clf.fit(train_x, train_y)
-    # estimators = {'estimators': [('dt', dt_best), ('rf', rf_best), ('lr', lr_best), ('svm', svm), ('gc', gc_best)]}
-    # estimators = {('dt', dt_best), ('rf', rf_best), ('lr', lr_best), ('svm', svm_best), ('gc', gc_best)}
-    estimators = {'dt': dt_best, 'rf': rf_best, 'lr': lr_best, 'svm': svm_best, 'gc': gc_best}
-    # estimators_b = {'estimators' = [('dt', dt_best), ('rf', rf_best), ('lr', lr_best), ('svm', svm), ('gc', gc_best)]}
-
-    tuned_parameters_vote = [{'voting': ['hard', 'soft']}]
-    vote_clf = GridSearchCV(ensemble.VotingClassifier(estimators=[('dt', dt_best), ('rf', rf_best), ('lr', lr_best), ('svm', svm_best), ('gc', gc_best)]), tuned_parameters_vote, cv=k, scoring='f1_weighted')
-    vote_clf.fit(train_x, train_y, **estimators)
-    vote_clf_best = ensemble.VotingClassifier(estimators=[('dt', dt_best), ('rf', rf_best), ('lr', lr_best), ('svm', svm_best), ('gc', gc_best)], voting=vote_clf.best_params_['voting'])
-
-    vote_clf_best.fit(train_x, train_y, **estimators)
+    tuned_parameters_vote = {'voting': ['hard', 'soft']}
+    parameters = {'estimators': [('dt', dt_best), ('rf', rf_best), ('lr', lr_best), ('gc', gc_best)]}
+    vote_clf = ClassFit(clf=ensemble.VotingClassifier, params=parameters)
+    vote_clf.grid_search(parameters=tuned_parameters_vote, k=k, score=score)
+    vote_clf.clf_fit(x=train_x, y=train_y)
+    vote_clf_best = ensemble.VotingClassifier(estimators=[('dt', dt_best), ('rf', rf_best), ('lr', lr_best), ('gc', gc_best)], voting=vote_clf.grid.best_params_['voting'])
+    vote_clf_best.fit(train_x, train_y)
 
     return vote_clf, vote_clf_best
 
 
-def decision_tree(train_x, train_y, k, name, voting=0):
+def decision_tree(train_x, train_y, k, score, name, voting=0):
     print('### Decision Tree ###')
 
     tuned_parameters_dt = [{'min_samples_leaf': [3, 5, 7, 9, 10, 15, 20, 30], 'max_depth': [3, 5, 6], 'class_weight': ['balanced']}]
     dt = ClassFit(clf=tree.DecisionTreeClassifier)
-    dt.grid_search(parameters=tuned_parameters_dt, k=k, score='f1_weighted')
+    dt.grid_search(parameters=tuned_parameters_dt, k=k, score=score)
     dt.clf_fit(x=train_x, y=train_y)
     dt_best = tree.DecisionTreeClassifier(**dt.grid.best_params_)
 
@@ -199,12 +232,12 @@ def decision_tree(train_x, train_y, k, name, voting=0):
     return dt, dt_best
 
 
-def random_forest(train_x, train_y, k, voting=0):
+def random_forest(train_x, train_y, k, score, voting=0):
     print('### Random Forest ###')
 
     tuned_parameters_rf = [{'n_estimators': [10, 25, 50, 100], 'max_depth': [5, 10, 20], 'class_weight': ['balanced']}]
     rf = ClassFit(clf=RandomForestClassifier)
-    rf.grid_search(parameters=tuned_parameters_rf, k=k, score='f1_weighted')
+    rf.grid_search(parameters=tuned_parameters_rf, k=k, score=score)
     rf.clf_fit(x=train_x, y=train_y)
 
     rf_best = RandomForestClassifier(**rf.grid.best_params_)
@@ -214,12 +247,12 @@ def random_forest(train_x, train_y, k, voting=0):
     return rf, rf_best
 
 
-def logistic_regression(train_x, train_y, k, voting=0):
+def logistic_regression(train_x, train_y, k, score, voting=0):
     print('### Logistic Regression ###')
 
     tuned_parameters_lr = [{'C': np.logspace(-2, 2, 20)}]
     lr = ClassFit(clf=linear_model.LogisticRegression)
-    lr.grid_search(parameters=tuned_parameters_lr, k=k, score='f1_weighted')
+    lr.grid_search(parameters=tuned_parameters_lr, k=k, score=score)
     lr.clf_fit(x=train_x, y=train_y.values.ravel())
 
     lr_best = linear_model.LogisticRegression(**lr.grid.best_params_)
@@ -229,12 +262,12 @@ def logistic_regression(train_x, train_y, k, voting=0):
     return lr, lr_best
 
 
-def k_nearest_neighbours(train_x, train_y, k):
+def k_nearest_neighbours(train_x, train_y, k, score):
     print('### KNN ###')
 
     tuned_parameters_knn = [{'n_neighbors': np.arange(1, 50, 1)}]
     knn = ClassFit(clf=neighbors.KNeighborsClassifier)
-    knn.grid_search(parameters=tuned_parameters_knn, k=k, score='f1_weighted')
+    knn.grid_search(parameters=tuned_parameters_knn, k=k, score=score)
     knn.clf_fit(x=train_x, y=train_y)
 
     knn_best = neighbors.KNeighborsClassifier(**knn.grid.best_params_)
@@ -243,27 +276,29 @@ def k_nearest_neighbours(train_x, train_y, k):
     return knn, knn_best
 
 
-def support_vector_machine(train_x, train_y, k, voting=0):
+def support_vector_machine(train_x, train_y, k, score, voting=0):
     print('### SVM ###')
 
     tuned_parameters_svc = [{'C': np.logspace(-2, 2, 10)}]
     svc = ClassFit(clf=svm.LinearSVC)
-    svc.grid_search(parameters=tuned_parameters_svc, k=k, score='f1_weighted')
+    # svc = ClassFit(clf=svm.SVC)  # Note: This performs better (around +5% on test dataset), but at the cost of at least x10 more time. Not worth it for now.
+    svc.grid_search(parameters=tuned_parameters_svc, k=k, score=score)
     svc.clf_fit(x=train_x, y=train_y)
 
     svc_best = svm.LinearSVC(**svc.grid.best_params_)
+    # svc_best = svm.SVC(**svc.grid.best_params_, probability=True)  # If using this model, there's a probability option for each class. Don't forget to adjust the code so this is saved in the final csv.
     if not voting:
         svc_best.fit(train_x, train_y)
 
     return svc, svc_best
 
 
-def adaboost_classifier(train_x, train_y, k, voting=0):
+def adaboost_classifier(train_x, train_y, k, score, voting=0):
     print('### Adaboost ###')
 
     tuned_parameters_ada = [{'n_estimators': [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]}]
     ada = ClassFit(clf=AdaBoostClassifier)
-    ada.grid_search(parameters=tuned_parameters_ada, k=k, score='f1_weighted')
+    ada.grid_search(parameters=tuned_parameters_ada, k=k, score=score)
     ada.clf_fit(x=train_x, y=train_y)
 
     ada_best = AdaBoostClassifier(**ada.grid.best_params_)
@@ -273,12 +308,12 @@ def adaboost_classifier(train_x, train_y, k, voting=0):
     return ada, ada_best
 
 
-def gradient_classifier(train_x, train_y, k, voting=0):
+def gradient_classifier(train_x, train_y, k, score, voting=0):
     print('### Gradient ###')
 
     tuned_parameters_gb = [{'n_estimators': [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]}]
     gb = ClassFit(clf=ensemble.GradientBoostingClassifier)
-    gb.grid_search(parameters=tuned_parameters_gb, k=k, score='f1_weighted')
+    gb.grid_search(parameters=tuned_parameters_gb, k=k, score=score)
     gb.clf_fit(x=train_x, y=train_y.values.ravel())
 
     gb_best = ensemble.GradientBoostingClassifier(**gb.grid.best_params_)
@@ -734,12 +769,10 @@ def class_creation(df):
     return new_targets_created
 
 
-def dataset_split(df, target, oversample=0):
+def dataset_split(df, target, feat_sel_check, oversample=0):
     print('Splitting dataset...')
 
     df_train, df_test = train_test_split(df, stratify=df[target])  # This ensures that the classes are evenly distributed by train/test datasets;
-    # print(df_train.shape)
-    # print(df_test.shape)
     # train_size, test_size = round(df.shape[0] * 0.8), df.shape[0] - round(df.shape[0] * 0.8)  # 80% and 20%
 
     df_train_y = df_train[target]
@@ -755,12 +788,12 @@ def dataset_split(df, target, oversample=0):
     return df_train_x, df_train_y, df_test_x, df_test_y
 
 
-def tag(target, oversample, approach, sales_place=0, group_cols=0, prov_and_tipo_enc=0, model=0):
+def tag(target, oversample, approach, score, sales_place=0, group_cols=0, prov_and_tipo_enc=0, model=0):
 
     if model:
         file_name = str(approach) + '_' + str(model) + '_target_' + str(target[0])
     elif not model:
-        file_name = str(approach) + '_target_' + str(target[0])
+        file_name = str(approach) + '_target_' + str(target[0]) + '_scoring_' + str(score)
     if group_cols:
         file_name += '_group_cols'
     if prov_and_tipo_enc:
@@ -822,34 +855,35 @@ def feature_importance_graph(features, feature_importance, name):
     plt.close()
 
 
-def performance_evaluation(model, best_model, train_x, train_y, test_x, test_y, name, start, voting=0):
+def performance_evaluation(model, best_model, train_x, train_y, test_x, test_y, name, start):
 
-    # Todo: remove comment symbols on the following prints
     prediction_trainer = best_model.predict(train_x)
-    model.grid_performance(prediction=prediction_trainer, y=train_y)
-    print('Train:')
-    print('Micro:', model.micro, '\n', 'Macro:', model.macro, '\n', 'Accuracy:', model.accuracy, '\n', 'Class Report', '\n', model.class_report)
     prediction_test = best_model.predict(test_x)
+
+    # if not voting:
+    model.grid_performance(prediction=prediction_trainer, y=train_y)
     model.grid_performance(prediction=prediction_test, y=test_y)
-    print('Test:')
-    print('Micro:', model.micro, '\n', 'Macro:', model.macro, '\n', 'Accuracy:', model.accuracy, '\n', 'Class Report', '\n', model.class_report)
+    # print('Train:', '\n', 'Micro:', model.micro, '\n', 'Macro:', model.macro, '\n', 'Accuracy:', model.accuracy, '\n', 'Class Report', '\n', model.class_report)
+    # print('Test:', '\n', 'Micro:', model.micro, '\n', 'Macro:', model.macro, '\n', 'Accuracy:', model.accuracy, '\n', 'Class Report', '\n', model.class_report)
+    # if voting:
+    #     print('WIP')
 
     tn, fp, fn, tp = confusion_matrix(test_y, prediction_test).ravel()
-    print('Value Counts:', Counter(prediction_test))
-    print('TN:', tn)
-    print('FP:', fp)
-    print('FN:', fn)
-    print('TP:', tp)
+    # print('Value Counts:', Counter(prediction_test))
+    # print('TN:', tn)
+    # print('FP:', fp)
+    # print('FN:', fn)
+    # print('TP:', tp)
     specificity = tn / (tn + fp)
-    print('Specificity:', specificity)
+    # print('Specificity:', specificity)
 
     class_report_csv(model.class_report, name)
-    performance_metrics_csv(model.micro, model.macro, model.accuracy, name, start)
+    performance_metrics_csv(model.micro, model.macro, model.accuracy, specificity, name, start)
 
     return prediction_trainer, prediction_test
 
 
-def performance_metrics_csv(micro, macro, accuracy, name, start):
+def performance_metrics_csv(micro, macro, accuracy, specificity, name, start):
 
     file_name = 'performance_evaluation_'
     file_name += name
@@ -859,10 +893,10 @@ def performance_metrics_csv(micro, macro, accuracy, name, start):
 
     # header = 0
     with open('output/' + file_name + '.csv', 'a', newline='') as csvfile:
-        fieldnames = ['micro_f1', 'macro_f1', 'accuracy', 'running_time']
+        fieldnames = ['micro_f1', 'macro_f1', 'accuracy', 'specificity', 'running_time']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerow({'micro_f1': micro, 'macro_f1': macro, 'accuracy': accuracy, 'running_time': (time.time() - start)})
+        writer.writerow({'micro_f1': micro, 'macro_f1': macro, 'accuracy': accuracy, 'specificity': specificity, 'running_time': (time.time() - start)})
 
 
 def class_report_csv(report, name):

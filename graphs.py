@@ -17,60 +17,65 @@ def main():
     # possible targets = ['stock_class1', 'stock_class2', 'margem_class1', 'score_class']
     targets = ['stock_class1', 'stock_class2', 'margem_class1', 'score_class']
     oversample = 0
+    score = 'recall'
+    # score = 'f1_weighted'
 
     # performance_evaluation_plot(input_dir)
     # performance_evaluation_plot_all(input_dir, targets)
     # average_score(input_dir)
     # score_distribution()
-    classification_report_plot(input_dir, oversample)
+    classification_report_plot(input_dir, oversample, score)
 
 
-def classification_report_plot(input_dir, oversample):
+def classification_report_plot(input_dir, oversample, score):
 
     f, ax = plt.subplots(3, figsize=(1400 / my_dpi, 1000 / my_dpi), dpi=my_dpi)
-    models = ['dt', 'rf', 'lr', 'knn', 'svm', 'ab', 'gc']
-    models_name = ['Dec. Tree', 'Rand. Forest', 'Log Reg', 'KNN', 'SVM', 'Adaboost', 'Gradient']
+    models = ['dt', 'rf', 'lr', 'knn', 'svm', 'ab', 'gc', 'voting']
+    models_name = ['Dec. Tree', 'Rand. Forest', 'Log Reg', 'KNN', 'SVM', 'Adaboost', 'Gradient', 'Voting']
     for model in models:
         model_label = models_name[models.index(model)]
         if oversample:
-            cr = pd.read_csv(input_dir + 'class_report_classification_target_score_class_' + str(model) + '_oversample.csv', index_col=0)
-            pe = pd.read_csv(input_dir + 'performance_evaluation_classification_target_score_class_' + str(model) + '_oversample.csv')
+            cr = pd.read_csv(input_dir + 'class_report_classification_target_score_class_scoring_' + str(score) + '_' + str(model) + '_oversample.csv', index_col=0)
+            pe = pd.read_csv(input_dir + 'performance_evaluation_classification_target_score_class_scoring_' + str(score) + '_' + str(model) + '_oversample.csv')
         if not oversample:
-            cr = pd.read_csv(input_dir + 'class_report_classification_target_score_class_' + str(model) + '.csv', index_col=0)
-            pe = pd.read_csv(input_dir + 'performance_evaluation_classification_target_score_class_' + str(model) + '.csv')
+            cr = pd.read_csv(input_dir + 'class_report_classification_target_score_class_scoring_' + str(score) + '_' + str(model) + '.csv', index_col=0)
+            pe = pd.read_csv(input_dir + 'performance_evaluation_classification_target_score_class_scoring_' + str(score) + '_' + str(model) + '.csv')
 
-        ax[0].plot(pe.loc[0, :][:-1].values, label=model_label)
-        ax[1].plot(cr.loc['avg/total', :][:-1].values)
+        ax[0].plot(pe.loc[0, :][:-1].values)
+        ax[1].plot(cr.loc['avg/total', :][:-1].values, label=model_label)
         ax[2].plot(cr.loc[:, 'recall'][:-1].values)
 
-    ax[0].legend()
+    ax[1].legend()
     for graph in ax:
         graph.grid(), graph.set_xlabel('Metrics'), graph.set_ylabel('Performance')
 
     plt.sca(ax[0])
-    plt.xticks(range(3), ['Micro F1', 'Macro F1', 'Accuracy'])
-    plt.yticks(np.arange(0.4, 1.01, 0.05), np.arange(0.4, 1.01, 0.05))
+    plt.xticks(range(4), ['Micro F1', 'Macro F1', 'Accuracy', 'Specificity'])
+    plt.yticks(np.arange(0.1, 1.01, 0.05), np.arange(0.1, 1.01, 0.05))
     ax[0].yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
 
     plt.sca(ax[1])
-    plt.xticks(range(3), ['Precision', 'Recall', 'F1 Score'])
-    plt.yticks(np.arange(0.4, 1.01, 0.05), np.arange(0.4, 1.01, 0.05))
+    plt.xticks(range(3), ['Precision', 'Recall/Sensitivity', 'F1 Score'])
+    plt.yticks(np.arange(0.1, 1.01, 0.05), np.arange(0.1, 1.01, 0.05))
     ax[1].yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
 
     plt.sca(ax[2])
-    plt.xticks(range(2), ['Class 0', 'Class 1'])
+    plt.xticks(range(2), ['Recall - Class 0', 'Recall - Class 1'])
+    plt.yticks(np.arange(0.2, 1.01, 0.05), np.arange(0.2, 1.01, 0.05))
+    ax[2].yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+    # plt.ylim([0.2, 1.0])
 
     plt.tight_layout()
 
     if oversample:
         ax[0].set_title('Model Performance - Oversampled')
-        save_fig('classification_performance_oversampled')
+        save_fig('classification_performance_' + str(score) + '_oversampled')
     if not oversample:
         ax[0].set_title('Model Performance')
-        save_fig('classification_performance')
+        save_fig('classification_performance_' + str(score))
 
     wm = plt.get_current_fig_manager()
-    wm.window.wm_geometry("-1500-50")
+    wm.window.wm_geometry("-1500-10")
     plt.show()
 
 
