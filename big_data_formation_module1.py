@@ -8,8 +8,9 @@ import time
 import pydotplus
 import matplotlib.pyplot as plt
 from sklearn.model_selection import GridSearchCV
-from sklearn.feature_selection import SelectKBest, chi2, f_classif, mutual_info_classif
 from sklearn import tree, linear_model, ensemble, svm, neighbors
+from sklearn.naive_bayes import GaussianNB
+from sklearn.feature_selection import SelectKBest, chi2, f_classif, mutual_info_classif
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.tree import export_graphviz
@@ -17,7 +18,8 @@ from sklearn.metrics import confusion_matrix, classification_report, f1_score, a
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.cluster import KMeans, MiniBatchKMeans, AffinityPropagation, SpectralClustering, Birch
 from io import StringIO
-from imblearn.over_sampling import RandomOverSampler
+from imblearn.over_sampling import RandomOverSampler, SMOTE
+from imblearn.under_sampling import RandomUnderSampler
 from db_tools import value_count_histogram, graph_component_silhouette, ohe, null_analysis, save_csv
 from classes import ClassFit, ClusterFit, RegFit
 from collections import Counter
@@ -48,7 +50,7 @@ def main():
     if regression:
         target = ['margem_percentagem']
     # possible targets = ['stock_class1', 'stock_class2', 'margem_class1', 'score_class', 'new_score']
-    oversample = 1
+    oversample = 0
 
     k = 10
     feat_sel_check = None
@@ -56,7 +58,7 @@ def main():
     # feature_selection_criteria = f_classif
     feature_selection_criteria = mutual_info_classif
 
-    models = ['dt']
+    # models = ['dt']
     # models = ['rf']
     # models = ['lr']
     # models = ['knn']
@@ -64,8 +66,9 @@ def main():
     # models = ['ab']
     # models = ['gc']
     # models = ['voting']
-    # models = ['dt', 'rf', 'lr', 'knn', 'svm', 'ab', 'gc', 'voting']
-    # models = ['dt', 'rf', 'lr', 'svm', 'ab', 'gc', 'voting']
+    # models = ['bayes']
+    # models = ['dt', 'rf', 'lr', 'knn', 'svm', 'ab', 'gc', 'bayes', 'voting']
+    models = ['dt', 'rf', 'lr', 'svm', 'ab', 'gc', 'bayes', 'voting']
 
     # if oversample:
     #     print('OVERSAMPLE 1')
@@ -110,12 +113,13 @@ def database_preparation(oversample, target_column, feat_sel_check, feature_sele
 
     # df = pd.read_csv('output/' + 'db_baviera_stock_optimization.csv', usecols=cols_to_use, encoding='utf-8', delimiter=',', index_col=0, dtype=dtypes)
     df = pd.read_csv('output/' + 'full_testing.csv', usecols=cols_to_use, encoding='utf-8', delimiter=',', index_col=0, dtype=dtypes)
-    df, targets = db_score_calculation(df, targets)
     df = database_cleanup(df)
+    df, targets = db_score_calculation(df, targets)
 
     col_group(df)
 
     targets += class_creation(df)
+
     df_ohe = df.copy(deep=True)
     df_ohe = ohe(df_ohe, ohe_cols)
     # targets.remove(target_column[0])
@@ -156,10 +160,6 @@ def stock_optimization_classification(df, name, model, k, score, train_x, train_
         oversample_flag_backup, original_index_backup = train_x['oversample_flag'], train_x['original_index']
         train_x.drop(['oversample_flag', 'original_index'], axis=1, inplace=True)
 
-    # print(null_analysis(train_x))
-    # print(train_x.head())
-    # print(train_x.shape)
-
     if model == 'dt':
         clf, clf_best = decision_tree(train_x, train_y, k, score, name)
     if model == 'rf':
@@ -174,6 +174,8 @@ def stock_optimization_classification(df, name, model, k, score, train_x, train_
         clf, clf_best = adaboost_classifier(train_x, train_y, k, score)
     if model == 'gc':
         clf, clf_best = gradient_classifier(train_x, train_y, k, score)
+    if model == 'bayes':
+        clf, clf_best = bayesian_classifier(train_x, train_y, k, score)
     if model == 'voting':
         clf, clf_best = voting_method(train_x, train_y, k, score, name)
 
@@ -181,9 +183,9 @@ def stock_optimization_classification(df, name, model, k, score, train_x, train_
     if oversample:
         train_x['oversample_flag'], train_x['original_index'] = oversample_flag_backup, original_index_backup
 
-    df_final = prediction_probabilities(clf_best, df, model, train_x, test_x, train_y, test_y, oversample, ohe_cols, prediction_trainer, prediction_test, feat_sel_check)
-    df_new_data = new_columns(df_final)
-    save_csv(df_new_data, 'output/db_final_' + str(name) + '.csv')
+    # df_final = prediction_probabilities(clf_best, df, model, train_x, test_x, train_y, test_y, oversample, ohe_cols, prediction_trainer, prediction_test, feat_sel_check)
+    # df_new_data = new_columns(df_final)
+    # save_csv(df_new_data, 'output/db_final_' + str(name) + '.csv')
 
 
 def new_columns(df):
@@ -341,6 +343,17 @@ def gradient_classifier(train_x, train_y, k, score, voting=0):
     return gb, gb_best
 
 
+def bayesian_classifier(train_x, train_y, k, score, voting=0):
+    print('### Bayesian ###')
+
+    gnb = ClassFit(clf=GaussianNB)
+    gnb_best = GaussianNB().fit(train_x, train_y)
+
+    return gnb, gnb_best
+
+
+
+
 def prediction_probabilities(clf, df, model, train_x, test_x, train_y, test_y, oversample, ohe_cols, prediction_trainer, prediction_test, feat_sel_check):
 
     if oversample:
@@ -446,9 +459,11 @@ def db_score_calculation(df, targets):
     df['score'] = df['inv_stock_days_norm'] * df['margem_percentagem_norm']
 
     df['stock_days_class'] = 0
-    df.loc[df['inv_stock_days_norm'] > 0.97, 'stock_days_class'] = 1
+    # df.loc[df['inv_stock_days_norm'] > 0.97, 'stock_days_class'] = 1
+    df.loc[df['stock_days'] <= 30, 'stock_days_class'] = 1
     df['margin_class'] = 0
-    df.loc[df['margem_percentagem_norm'] > 0.60, 'margin_class'] = 1
+    # df.loc[df['margem_percentagem_norm'] > 0.60, 'margin_class'] = 1
+    df.loc[df['margem_percentagem'] > 0.0, 'margin_class'] = 1
 
     df.drop(['stock_days_norm', 'inv_stock_days_norm', 'margem_percentagem_norm'], axis=1, inplace=True)
     targets += ['score']
@@ -590,8 +605,13 @@ def oversample_data(train_x, train_y):
 
     train_x['oversample_flag'] = range(train_x.shape[0])
     train_x['original_index'] = train_x.index
+    # print(train_x.shape, '\n', train_y['new_score'].value_counts())
+
     ros = RandomOverSampler(random_state=42)
+    # ros = RandomUnderSampler(random_state=42)
+    # sm = SMOTE(random_state=42)
     train_x_resampled, train_y_resampled = ros.fit_sample(train_x, train_y.values.ravel())
+    # train_x_resampled, train_y_resampled = sm.fit_sample(train_x, train_y.values.ravel())
 
     train_x_resampled = pd.DataFrame(np.atleast_2d(train_x_resampled), columns=list(train_x))
     train_y_resampled = pd.Series(train_y_resampled)
@@ -601,6 +621,7 @@ def oversample_data(train_x, train_y):
             dtype_checkup(train_x_resampled, train_x)
         break
 
+    # print(train_x_resampled.shape, '\n', train_y_resampled.value_counts())
     return train_x_resampled, train_y_resampled
 
 
@@ -840,7 +861,7 @@ def dataset_split(df, target, oversample=0):
     df_test_y = df_test[target]
     df_test_x = df_test.drop(target, axis=1)
 
-    print('train_x', df_train_x.shape, 'test_x', df_test_x.shape)
+    # print('train_x', df_train_x.shape, 'test_x', df_test_x.shape)
 
     if oversample:
         print('Oversampling small classes...')
@@ -909,7 +930,7 @@ def feature_importance_graph(features, feature_importance, name):
     plt.grid()
 
     plt.savefig('output/' + file_name + '.png')
-    plt.show()
+    # plt.show()
     plt.clf()
     plt.close()
 
