@@ -13,7 +13,7 @@ from sklearn import tree, linear_model, ensemble, svm, neighbors
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.tree import export_graphviz
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, classification_report, f1_score, accuracy_score
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.cluster import KMeans, MiniBatchKMeans, AffinityPropagation, SpectralClustering, Birch
 from io import StringIO
@@ -44,33 +44,51 @@ def main():
     score = 'recall'
     # score = 'f1_weighted'
 
-    target = ['score_class']
+    target = ['new_score']
     if regression:
         target = ['margem_percentagem']
-    # possible targets = ['stock_class1', 'stock_class2', 'margem_class1', 'score_class']
+    # possible targets = ['stock_class1', 'stock_class2', 'margem_class1', 'score_class', 'new_score']
     oversample = 1
 
-    # model = 'dt'
-    # model = 'rf'
-    # model = 'lr'
-    # model = 'knn'
-    # model = 'svm'
-    # model = 'ab'
-    # model = 'gc'
-    # model = 'voting'
-
     k = 10
-    feat_sel_check = 6
-    models = ['dt', 'rf', 'lr', 'knn', 'svm', 'ab', 'gc', 'voting']
+    feat_sel_check = None
+    # feature_selection_criteria = chi2
+    # feature_selection_criteria = f_classif
+    feature_selection_criteria = mutual_info_classif
 
+    models = ['dt']
+    # models = ['rf']
+    # models = ['lr']
+    # models = ['knn']
+    # models = ['svm']
+    # models = ['ab']
+    # models = ['gc']
+    # models = ['voting']
+    # models = ['dt', 'rf', 'lr', 'knn', 'svm', 'ab', 'gc', 'voting']
+    # models = ['dt', 'rf', 'lr', 'svm', 'ab', 'gc', 'voting']
+
+    # if oversample:
+    #     print('OVERSAMPLE 1')
+    # else:
+    #     print('OVERSAMPLE 0')
+    #
+    # if type(feat_sel_check) == int:
+    #     print('FEAT SEL 1')
+    # else:
+    #     print('FEAT SEL 0')
+
+    # for feat_sel_check in range(5, 34):
+    #     print('Number of current Features Selected:', feat_sel_check)
     for model in models:
-        df, train_x, train_y, test_x, test_y, ohe_cols = database_preparation(oversample, target, feat_sel_check)
+        name = tag(target, oversample, 'classification', score, feat_sel_check, feature_selection_criteria, model)
+
+        df, train_x, train_y, test_x, test_y, ohe_cols, non_targets = database_preparation(oversample, target, feat_sel_check, feature_selection_criteria)
 
         if classification:
             if sales_place_models:
                 stock_optimization_sales_place(df, target, start, oversample)  # Models by selling location - shouldn't be needed as the sales place should appear high in the tree;
             if not sales_place_models:
-                stock_optimization_classification(df, model, k, score, train_x, train_y, test_x, test_y, target, ohe_cols, start, oversample)  # Classification Approach
+                stock_optimization_classification(df, name, model, k, score, train_x, train_y, test_x, test_y, ohe_cols, start, oversample, feat_sel_check)  # Classification Approach
         if clustering:
             stock_optimization_clustering(train_x, train_y, test_x, test_y, method='minibatchkmeans')  # Clustering Approach
         if regression:
@@ -81,7 +99,7 @@ def main():
         print('\nRunning Time: %.2f' % (time.time() - start), 'seconds')
 
 
-def database_preparation(oversample, target_column, feat_sel_check):
+def database_preparation(oversample, target_column, feat_sel_check, feature_selection_criteria):
     print('Preparing database...')
 
     targets = ['margem_percentagem', 'Margem', 'stock_days']
@@ -90,7 +108,8 @@ def database_preparation(oversample, target_column, feat_sel_check):
     cols_to_use = ['Unnamed: 0', 'Modelo', 'Prov', 'Local da Venda', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'stock_days', 'Margem', 'margem_percentagem']
     ohe_cols = ['Jantes_new', 'Cor_Interior_new', 'Cor_Exterior_new', 'Local da Venda_new', 'Modelo_new', 'Prov_new']
 
-    df = pd.read_csv('output/' + 'db_baviera_stock_optimization.csv', usecols=cols_to_use, encoding='utf-8', delimiter=',', index_col=0, dtype=dtypes)
+    # df = pd.read_csv('output/' + 'db_baviera_stock_optimization.csv', usecols=cols_to_use, encoding='utf-8', delimiter=',', index_col=0, dtype=dtypes)
+    df = pd.read_csv('output/' + 'full_testing.csv', usecols=cols_to_use, encoding='utf-8', delimiter=',', index_col=0, dtype=dtypes)
     df, targets = db_score_calculation(df, targets)
     df = database_cleanup(df)
 
@@ -99,72 +118,70 @@ def database_preparation(oversample, target_column, feat_sel_check):
     targets += class_creation(df)
     df_ohe = df.copy(deep=True)
     df_ohe = ohe(df_ohe, ohe_cols)
-    targets.remove(target_column[0])
+    # targets.remove(target_column[0])
     non_targets = [x for x in list(df_ohe) if x not in targets]
-    df_train_x, df_train_y, df_test_x, df_test_y = dataset_split(df_ohe[non_targets], target_column, feat_sel_check, oversample)
 
     if type(feat_sel_check) == int:
-        df_new = feature_selection(df_train_x, df_train_y, df_test_x, df_test_y, feat_sel_check)
+        df_ohe = feature_selection(df_ohe, non_targets, target_column, feat_sel_check, feature_selection_criteria)
+    else:
+        df_ohe = df_ohe[non_targets + target_column]
 
-    sys.exit()
+    df_train_x, df_train_y, df_test_x, df_test_y = dataset_split(df_ohe, target_column, oversample)
 
-    return df, df_train_x, df_train_y, df_test_x, df_test_y, ohe_cols
-
-
-def feature_selection(train_x, train_y, test_x, test_y, feat_sel_check):
-
-    oversample_flag_backup, original_index_backup = train_x['oversample_flag'], train_x['original_index']
-    train_x.drop(['oversample_flag', 'original_index'], axis=1, inplace=True)
-
-    # Not the most efficient way but i need to merge the datasets back together
-    dfs = [train_x, train_y, test_x, test_y]
-    # for df in dfs:
-    #     print(df.shape)
-
-    x = pd.concat([train_x, test_x])
-    y = pd.concat([train_y, test_y['score_class']])
-
-    print('before', x.shape, '\n', list(x))
-    selector = SelectKBest(chi2, k=feat_sel_check).fit(x, y)
-    idxs_selected = selector.get_support(indices=True)
-    df_features_new = list(list(list(x))[i] for i in idxs_selected)
-    x_new = x[df_features_new]
-    print(x_new.shape, '\n', x_new.head())
-    sys.exit()
+    return df, df_train_x, df_train_y, df_test_x, df_test_y, ohe_cols, non_targets
 
 
-def stock_optimization_classification(df, model, k, score, train_x, train_y, test_x, test_y, target_column, ohe_cols, start, oversample):
+def feature_selection(df, features, target_column, feature_number, feature_selection_criteria):
+    # print('before', '\n', null_analysis(df))
+    # print('before', '\n', df.shape)
+
+    x = df[features]
+    y = df[target_column]
+
+    selector = SelectKBest(feature_selection_criteria, k=feature_number).fit(x, y)
+    cols_selected = selector.get_support(indices=True)
+    new_features = list(list(list(x))[i] for i in cols_selected)
+    new_features += list(y)
+    df_new = df[new_features]
+    # print('after', df_new.shape)
+    # print('after', '\n', null_analysis(df_new))
+
+    return df_new
+
+
+def stock_optimization_classification(df, name, model, k, score, train_x, train_y, test_x, test_y, ohe_cols, start, oversample, feat_sel_check):
     print('Classification Approach...')
 
     if oversample:
         oversample_flag_backup, original_index_backup = train_x['oversample_flag'], train_x['original_index']
         train_x.drop(['oversample_flag', 'original_index'], axis=1, inplace=True)
 
-    name = tag(target_column, oversample, 'classification', score, model)
+    # print(null_analysis(train_x))
+    # print(train_x.head())
+    # print(train_x.shape)
 
     if model == 'dt':
         clf, clf_best = decision_tree(train_x, train_y, k, score, name)
     if model == 'rf':
-        clf, clf_best = random_forest(train_x, train_y, k, score,)
+        clf, clf_best = random_forest(train_x, train_y, k, score)
     if model == 'lr':
-        clf, clf_best = logistic_regression(train_x, train_y, k, score,)
+        clf, clf_best = logistic_regression(train_x, train_y, k, score)
     if model == 'knn':
-        clf, clf_best = k_nearest_neighbours(train_x, train_y, k, score,)
+        clf, clf_best = k_nearest_neighbours(train_x, train_y, k, score)
     if model == 'svm':
-        clf, clf_best = support_vector_machine(train_x, train_y, k, score,)
+        clf, clf_best = support_vector_machine(train_x, train_y, k, score)
     if model == 'ab':
-        clf, clf_best = adaboost_classifier(train_x, train_y, k, score,)
+        clf, clf_best = adaboost_classifier(train_x, train_y, k, score)
     if model == 'gc':
-        clf, clf_best = gradient_classifier(train_x, train_y, k, score,)
+        clf, clf_best = gradient_classifier(train_x, train_y, k, score)
     if model == 'voting':
         clf, clf_best = voting_method(train_x, train_y, k, score, name)
 
     prediction_trainer, prediction_test = performance_evaluation(clf, clf_best, train_x, train_y, test_x, test_y, name, start)
-
     if oversample:
         train_x['oversample_flag'], train_x['original_index'] = oversample_flag_backup, original_index_backup
 
-    df_final = prediction_probabilities(clf_best, df, model, train_x, test_x, train_y, test_y, oversample, ohe_cols, prediction_trainer, prediction_test)
+    df_final = prediction_probabilities(clf_best, df, model, train_x, test_x, train_y, test_y, oversample, ohe_cols, prediction_trainer, prediction_test, feat_sel_check)
     df_new_data = new_columns(df_final)
     save_csv(df_new_data, 'output/db_final_' + str(name) + '.csv')
 
@@ -172,7 +189,8 @@ def stock_optimization_classification(df, model, k, score, train_x, train_y, tes
 def new_columns(df):
 
     df['nr_cars_sold'] = 0
-    df_grouped = df.groupby(['Caixa Auto', 'Navegação',  'Sensores', 'Jantes', 'Cor_Interior', 'Cor_Exterior', 'Local da Venda', 'Modelo', 'Prov'])
+    cols_to_group = [x for x in list(df) if x in ['Caixa Auto', 'Navegação',  'Sensores', 'Jantes', 'Cor_Interior', 'Cor_Exterior', 'Local da Venda', 'Modelo', 'Prov']]
+    df_grouped = df.groupby(cols_to_group)
     df = df_grouped.apply(additional_info)
     return df
 
@@ -202,7 +220,7 @@ def voting_method(train_x, train_y, k, score, name):
 
     print('### Voting ###')
 
-    tuned_parameters_vote = {'voting': ['hard', 'soft']}
+    tuned_parameters_vote = {'voting': ['soft']}
     parameters = {'estimators': [('dt', dt_best), ('rf', rf_best), ('lr', lr_best), ('gc', gc_best)]}
     vote_clf = ClassFit(clf=ensemble.VotingClassifier, params=parameters)
     vote_clf.grid_search(parameters=tuned_parameters_vote, k=k, score=score)
@@ -323,7 +341,7 @@ def gradient_classifier(train_x, train_y, k, score, voting=0):
     return gb, gb_best
 
 
-def prediction_probabilities(clf, df, model, train_x, test_x, train_y, test_y, oversample, ohe_cols, prediction_trainer, prediction_test):
+def prediction_probabilities(clf, df, model, train_x, test_x, train_y, test_y, oversample, ohe_cols, prediction_trainer, prediction_test, feat_sel_check):
 
     if oversample:
         oversample_flag_backup, original_index_backup = train_x['oversample_flag'], train_x['original_index']
@@ -345,20 +363,24 @@ def prediction_probabilities(clf, df, model, train_x, test_x, train_y, test_y, o
         if oversample:
             train_x['oversample_flag'], train_x.index = oversample_flag_backup, original_index_backup
             train_x.drop_duplicates(subset=['oversample_flag'], inplace=True)
+            train_x.drop(['oversample_flag'], axis=1, inplace=True)
 
-        train_x = pd.concat([train_x, df['score']], join='inner', axis=1)
-        train_x = pd.concat([train_x, df['stock_days']], join='inner', axis=1)
-        train_x = pd.concat([train_x, df['Margem']], join='inner', axis=1)
-        train_x = pd.concat([train_x, df['margem_percentagem']], join='inner', axis=1)
+        # if not oversample:
+        #     train_x = pd.concat([train_x, df['score']], join='inner', axis=1)
+        #     train_x = pd.concat([train_x, df['stock_days']], join='inner', axis=1)
+        #     train_x = pd.concat([train_x, df['Margem']], join='inner', axis=1)
+        #     train_x = pd.concat([train_x, df['margem_percentagem']], join='inner', axis=1)
 
         test_x['score_class_gt'] = test_y
         test_x['score_class_pred'] = prediction_test
         test_x['proba_0'] = prob_test_0
         test_x['proba_1'] = prob_test_1
-        test_x = pd.concat([test_x, df['score']], join='inner', axis=1)
-        test_x = pd.concat([test_x, df['stock_days']], join='inner', axis=1)
-        test_x = pd.concat([test_x, df['Margem']], join='inner', axis=1)
-        test_x = pd.concat([test_x, df['margem_percentagem']], join='inner', axis=1)
+
+        # if not oversample:
+        #     test_x = pd.concat([test_x, df['score']], join='inner', axis=1)
+        #     test_x = pd.concat([test_x, df['stock_days']], join='inner', axis=1)
+        #     test_x = pd.concat([test_x, df['Margem']], join='inner', axis=1)
+        #     test_x = pd.concat([test_x, df['margem_percentagem']], join='inner', axis=1)
 
     if model == 'svm':
         probability_trainer = clf.decision_function(train_x).tolist()
@@ -372,32 +394,46 @@ def prediction_probabilities(clf, df, model, train_x, test_x, train_y, test_y, o
         if oversample:
             train_x['oversample_flag'], train_x.index = oversample_flag_backup, original_index_backup
             train_x.drop_duplicates(subset=['oversample_flag'], inplace=True)
+            train_x.drop(['oversample_flag'], axis=1, inplace=True)
 
-        train_x = pd.concat([train_x, df['score']], join='inner', axis=1)
-        train_x = pd.concat([train_x, df['stock_days']], join='inner', axis=1)
-        train_x = pd.concat([train_x, df['Margem']], join='inner', axis=1)
-        train_x = pd.concat([train_x, df['margem_percentagem']], join='inner', axis=1)
+        # if not oversample:
+        #     train_x = pd.concat([train_x, df['score']], join='inner', axis=1)
+        #     train_x = pd.concat([train_x, df['stock_days']], join='inner', axis=1)
+        #     train_x = pd.concat([train_x, df['Margem']], join='inner', axis=1)
+        #     train_x = pd.concat([train_x, df['margem_percentagem']], join='inner', axis=1)
 
         test_x['score_class_gt'] = test_y
         test_x['score_class_pred'] = prediction_test
-        test_x = pd.concat([test_x, df['score']], join='inner', axis=1)
-        test_x = pd.concat([test_x, df['stock_days']], join='inner', axis=1)
-        test_x = pd.concat([test_x, df['Margem']], join='inner', axis=1)
-        test_x = pd.concat([test_x, df['margem_percentagem']], join='inner', axis=1)
+        # if not oversample:
+        #     test_x = pd.concat([test_x, df['score']], join='inner', axis=1)
+        #     test_x = pd.concat([test_x, df['stock_days']], join='inner', axis=1)
+        #     test_x = pd.concat([test_x, df['Margem']], join='inner', axis=1)
+        #     test_x = pd.concat([test_x, df['margem_percentagem']], join='inner', axis=1)
+
+    train_x = pd.concat([train_x, df['score']], join='inner', axis=1)
+    train_x = pd.concat([train_x, df['stock_days']], join='inner', axis=1)
+    train_x = pd.concat([train_x, df['Margem']], join='inner', axis=1)
+    train_x = pd.concat([train_x, df['margem_percentagem']], join='inner', axis=1)
+
+    test_x = pd.concat([test_x, df['score']], join='inner', axis=1)
+    test_x = pd.concat([test_x, df['stock_days']], join='inner', axis=1)
+    test_x = pd.concat([test_x, df['Margem']], join='inner', axis=1)
+    test_x = pd.concat([test_x, df['margem_percentagem']], join='inner', axis=1)
 
     df_new = pd.concat([train_x, test_x], axis=0, sort=True)
-    df = reversed_ohe(df_new, ohe_cols)
+    df_new = reversed_ohe(df_new, ohe_cols)
 
-    return df
+    return df_new
 
 
 def reversed_ohe(df, ohe_cols):
     for value in ohe_cols:
         ohe_columns = [x for x in list(df) if value in x]
-        col_name = value.replace('_new', '')
-        df[col_name] = pd.get_dummies(df[ohe_columns]).idxmax(1)
-        df[col_name] = df[col_name].str.replace((value + '_'), '')
-        df.drop(ohe_columns, axis=1, inplace=True)
+        if len(ohe_columns):
+            col_name = value.replace('_new', '')
+            df[col_name] = pd.get_dummies(df[ohe_columns]).idxmax(1)
+            df[col_name] = df[col_name].str.replace((value + '_'), '')
+            df.drop(ohe_columns, axis=1, inplace=True)
 
     return df
 
@@ -408,6 +444,11 @@ def db_score_calculation(df, targets):
 
     df['margem_percentagem_norm'] = (df['margem_percentagem'] - df['margem_percentagem'].min()) / (df['margem_percentagem'].max() - df['margem_percentagem'].min())
     df['score'] = df['inv_stock_days_norm'] * df['margem_percentagem_norm']
+
+    df['stock_days_class'] = 0
+    df.loc[df['inv_stock_days_norm'] > 0.97, 'stock_days_class'] = 1
+    df['margin_class'] = 0
+    df.loc[df['margem_percentagem_norm'] > 0.60, 'margin_class'] = 1
 
     df.drop(['stock_days_norm', 'inv_stock_days_norm', 'margem_percentagem_norm'], axis=1, inplace=True)
     targets += ['score']
@@ -484,6 +525,7 @@ def database_cleanup(df):
     df = df[~df.Modelo.str.contains('Z4')]  # Removes Z4 Models
     df = df.loc[df['Prov'] != 'Demonstração']  # Removes demo cars
     df = df.loc[df['Prov'] != 'Em utilização']  # Removes cars being used
+    df = df[~df.Modelo.str.contains('MINI')]
 
     return df
 
@@ -551,7 +593,20 @@ def oversample_data(train_x, train_y):
     ros = RandomOverSampler(random_state=42)
     train_x_resampled, train_y_resampled = ros.fit_sample(train_x, train_y.values.ravel())
 
-    return pd.DataFrame(np.atleast_2d(train_x_resampled), columns=list(train_x)), pd.Series(train_y_resampled)
+    train_x_resampled = pd.DataFrame(np.atleast_2d(train_x_resampled), columns=list(train_x))
+    train_y_resampled = pd.Series(train_y_resampled)
+    for column in list(train_x_resampled):
+        if train_x_resampled[column].dtype != train_x[column].dtype:
+            # print('Problem found with dtypes, fixing it...', )
+            dtype_checkup(train_x_resampled, train_x)
+        break
+
+    return train_x_resampled, train_y_resampled
+
+
+def dtype_checkup(train_x_resampled, train_x):
+    for column in list(train_x):
+        train_x_resampled[column] = train_x_resampled[column].astype(train_x[column].dtype)
 
 
 def col_group(df):
@@ -559,35 +614,35 @@ def col_group(df):
     color_ext_grouping(df)
     # column_grouping(df, column='Cor_Exterior', values_to_keep=['preto', 'cinzento', 'branco', 'azul'])
     # value_count_histogram(df, 'Cor_Exterior', 'cor_exterior_before')
-    # value_count_histogram(df, 'Cor_Exterior_new', 'cor_exterior_after')
+    # value_count_histogram(df, 'Cor_Exterior_new', 'cor_exterior_after_mini_removal')
 
     # Cor_Interior
     color_int_grouping(df)
     # column_grouping(df, column='Cor_Interior', values_to_keep=['preto', 'antracite', 'dakota', 'antracite/cinza/preto'])
     # value_count_histogram(df, 'Cor_Interior', 'cor_interior_before')
-    # value_count_histogram(df, 'Cor_Interior_new', 'cor_interior_after')
+    # value_count_histogram(df, 'Cor_Interior_new', 'cor_interior_after_mini_removal')
 
     # Jantes
     # column_grouping(df, column='Jantes', values_to_keep=['standard', '17', '18', '19'])
     jantes_grouping(df)
     # value_count_histogram(df, 'Jantes', 'jantes_before')
-    # value_count_histogram(df, 'Jantes_new', 'jantes_after')
+    # value_count_histogram(df, 'Jantes_new', 'jantes_after_mini_removal')
 
     # Modelo
     model_grouping(df)
     # value_count_histogram(df, 'Modelo', 'modelo_before')
-    # value_count_histogram(df, 'Modelo_new', 'modelo_after')
+    # value_count_histogram(df, 'Modelo_new', 'modelo_after_mini_removal')
 
     # Local da Venda
     sales_place_grouping(df)
     # value_count_histogram(df, 'Local da Venda', 'local_da_venda_before')
-    # value_count_histogram(df, 'Local da Venda_new', 'local_da_venda_after')
+    # value_count_histogram(df, 'Local da Venda_new', 'local_da_venda_after_mini_removal')
 
     # Prov
     # value_count_histogram(df, 'Prov', 'prov_before')
     df.loc[df['Prov'] == 'Viaturas Km 0', 'Prov'] = 'Novos'
     df.rename({'Prov': 'Prov_new'}, axis=1, inplace=True)
-    # value_count_histogram(df, 'Prov_new', 'prov_after')
+    # value_count_histogram(df, 'Prov_new', 'prov_after_mini_removal')
 
     df.drop('Cor_Exterior', axis=1, inplace=True)
     df.drop('Cor_Interior', axis=1, inplace=True)
@@ -765,14 +820,18 @@ def class_creation(df):
     df.loc[(df['score'] >= 0) & (df['score'] < 0.7), 'score_class'] = 0
     df.loc[(df['score'] >= 0.7), 'score_class'] = 1
 
-    new_targets_created = ['stock_class1', 'stock_class2', 'margem_class1', 'score_class']
+    df['new_score'] = 0
+    df.loc[(df['stock_days_class'] == 1) & (df['margin_class'] == 1), 'new_score'] = 1
+    df.drop(['stock_days_class', 'margin_class'], axis=1, inplace=True)
+
+    new_targets_created = ['stock_class1', 'stock_class2', 'margem_class1', 'score_class', 'new_score']
     return new_targets_created
 
 
-def dataset_split(df, target, feat_sel_check, oversample=0):
+def dataset_split(df, target, oversample=0):
     print('Splitting dataset...')
 
-    df_train, df_test = train_test_split(df, stratify=df[target])  # This ensures that the classes are evenly distributed by train/test datasets;
+    df_train, df_test = train_test_split(df, stratify=df[target], random_state=2)  # This ensures that the classes are evenly distributed by train/test datasets;
     # train_size, test_size = round(df.shape[0] * 0.8), df.shape[0] - round(df.shape[0] * 0.8)  # 80% and 20%
 
     df_train_y = df_train[target]
@@ -781,6 +840,8 @@ def dataset_split(df, target, feat_sel_check, oversample=0):
     df_test_y = df_test[target]
     df_test_x = df_test.drop(target, axis=1)
 
+    print('train_x', df_train_x.shape, 'test_x', df_test_x.shape)
+
     if oversample:
         print('Oversampling small classes...')
         df_train_x, df_train_y = oversample_data(df_train_x, df_train_y)
@@ -788,20 +849,18 @@ def dataset_split(df, target, feat_sel_check, oversample=0):
     return df_train_x, df_train_y, df_test_x, df_test_y
 
 
-def tag(target, oversample, approach, score, sales_place=0, group_cols=0, prov_and_tipo_enc=0, model=0):
+def tag(target, oversample, approach, score, feature_selection_check, feature_selection_criteria, model=None, sales_place=0):
 
-    if model:
-        file_name = str(approach) + '_' + str(model) + '_target_' + str(target[0])
-    elif not model:
-        file_name = str(approach) + '_target_' + str(target[0]) + '_scoring_' + str(score)
-    if group_cols:
-        file_name += '_group_cols'
-    if prov_and_tipo_enc:
-        file_name += '_prov_and_type'
+    # if model:
+    #     file_name = str(approach) + '_' + str(model) + '_target_' + str(target[0])
+    # elif not model:
+    file_name = str(approach) + '_' + str(model) + '_target_' + str(target[0]) + '_scoring_' + str(score)
     if sales_place:
         file_name += '_' + str(sales_place)
     if oversample:
         file_name += '_oversample'
+    if type(feature_selection_check) == int:
+        file_name += '_' + str(feature_selection_check) + '_features_' + str(feature_selection_criteria.__name__)
 
     return file_name
 
@@ -850,23 +909,19 @@ def feature_importance_graph(features, feature_importance, name):
     plt.grid()
 
     plt.savefig('output/' + file_name + '.png')
-    # plt.show()
+    plt.show()
     plt.clf()
     plt.close()
 
 
 def performance_evaluation(model, best_model, train_x, train_y, test_x, test_y, name, start):
-
     prediction_trainer = best_model.predict(train_x)
     prediction_test = best_model.predict(test_x)
 
-    # if not voting:
     model.grid_performance(prediction=prediction_trainer, y=train_y)
+    print('Train:', '\n', 'Micro:', model.micro, '\n', 'Macro:', model.macro, '\n', 'Accuracy:', model.accuracy, '\n', 'Class Report', '\n', model.class_report)
     model.grid_performance(prediction=prediction_test, y=test_y)
-    # print('Train:', '\n', 'Micro:', model.micro, '\n', 'Macro:', model.macro, '\n', 'Accuracy:', model.accuracy, '\n', 'Class Report', '\n', model.class_report)
-    # print('Test:', '\n', 'Micro:', model.micro, '\n', 'Macro:', model.macro, '\n', 'Accuracy:', model.accuracy, '\n', 'Class Report', '\n', model.class_report)
-    # if voting:
-    #     print('WIP')
+    print('Test:', '\n', 'Micro:', model.micro, '\n', 'Macro:', model.macro, '\n', 'Accuracy:', model.accuracy, '\n', 'Class Report', '\n', model.class_report)
 
     tn, fp, fn, tp = confusion_matrix(test_y, prediction_test).ravel()
     # print('Value Counts:', Counter(prediction_test))

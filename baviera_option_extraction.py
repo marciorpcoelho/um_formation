@@ -23,7 +23,7 @@ def db_creation(df):
     df['Opcional'] = df['Opcional'].str.lower()
     df['Cor'] = df['Cor'].str.lower()
     df['Interior'] = df['Interior'].str.lower()
-    df = df[df['Opcional'] != 'preço base']
+    # df = df[df['Opcional'] != 'preço base']
     df = df[df['Opcional'] != 'preço de venda']
     df['Modelo'] = df['Modelo'].str.replace(' - não utilizar', '')
 
@@ -146,7 +146,9 @@ def db_score_calculation(df):
 
     df_grouped = df.groupby('Nº Stock')
     for key, group in df_grouped:
+        # print(key, '\n', group)
         total = group['Custo'].sum()
+        # print('\n', total)
         df.loc[df['Nº Stock'] == key, 'margem_percentagem'] = group['Margem'] / total
 
     df['margem_percentagem_norm'] = (df['margem_percentagem'] - df['margem_percentagem'].min()) / (df['margem_percentagem'].max() - df['margem_percentagem'].min())
@@ -171,9 +173,12 @@ def main():
     start = time.time()
     print('Creating DB...')
 
-    full_db = 'output/' + 'db_full_baviera.csv'
-    stock_opt_db = 'output/' + 'db_baviera_stock_optimization.csv'
+    # full_db = 'output/' + 'db_full_baviera.csv'
+    full_db = 'output/' + 'full_testing.csv'
+    # stock_opt_db = 'output/' + 'db_baviera_stock_optimization.csv'
+    stock_opt_db = 'output/' + 'testing.csv'
     input_file = 'sql_db/' + 'Opcionais Baviera.csv'
+    # input_file = 'output/' + 'small_test.csv'
 
     if os.path.isfile(full_db):
         os.remove(full_db)
@@ -184,10 +189,8 @@ def main():
     df_third_step = db_score_calculation(df_second_step)
     df_final = db_duplicate_removal(df_third_step)
 
-    sel_cols = ['Modelo', 'Local da Venda', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'Tipo Encomenda', 'stock_days', 'Margem']
-    # if os.path.isfile(stock_opt_db):
-    #     os.remove(stock_opt_db)
-    df_final[['Modelo', 'Prov', 'Local da Venda', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'Tipo Encomenda', 'stock_days', 'Margem']].to_csv(stock_opt_db)
+    sel_cols = ['Modelo', 'Local da Venda', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'Tipo Encomenda', 'stock_days', 'Margem', 'margem_percentagem']
+    # df_final[['Modelo', 'Prov', 'Local da Venda', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'Tipo Encomenda', 'stock_days', 'Margem', 'margem_percentagem']].to_csv(stock_opt_db)
     save_csv(df_final[sel_cols], stock_opt_db)
 
     # if os.path.isfile(full_db):
