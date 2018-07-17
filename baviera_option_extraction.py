@@ -20,19 +20,22 @@ pd.set_option('display.expand_frame_repr', False)
 
 
 def db_creation(df):
-    df['Opcional'] = df['Opcional'].str.lower()
-    df['Cor'] = df['Cor'].str.lower()
-    df['Interior'] = df['Interior'].str.lower()
-    # df = df[df['Opcional'] != 'preço base']
-    df = df[df['Opcional'] != 'preço de venda']
-    df['Modelo'] = df['Modelo'].str.replace(' - não utilizar', '')
+    df.loc[:, 'Opcional'] = df['Opcional'].str.lower()
+    df.loc[:, 'Cor'] = df['Cor'].str.lower()
+    df.loc[:, 'Interior'] = df['Interior'].str.lower()
+    # df.loc[:, :] = df.loc[df['Opcional'] != 'preço de venda', :]
+    df = df.drop(df.loc[df['Opcional'] == 'preço de venda', :].index, axis=0)
+    df.loc[:, 'Modelo'] = df['Modelo'].str.replace(' - não utilizar', '')
 
     df = symbol_replacer(df)
+    df.drop(['CdInt'], axis=1, inplace=True)  # Column that has missing values which are needed
+    df.drop(['CdCor'], axis=1, inplace=True)  # Column that has missing values which are needed
+    # df.drop(['Tipo Encomenda'], axis=1, inplace=True)  # Column that has missing values which are needed
+    df.dropna(axis=0, inplace=True)  # Removes all remaining NA's.
 
-    df['Navegação'], df['Sensores'], df['Cor_Interior'], df['Caixa Auto'], df['Cor_Exterior'], df['Jantes'] = 0, 0, 0, 0, 0, 0  # New Columns
-    colors_pt = ['preto', 'branco', 'azul', 'vermelho', 'cinza', 'cinzento', 'prateado', 'prata', 'amarelo', 'laranja', 'castanho', 'dourado', 'antracit', 'antracite/preto', 'antracite/cinza/preto', 'antracito', 'dakota', 'antracite', 'antracite/vermelho/preto', 'oyster/preto', 'prata/preto/preto', 'âmbar/preto/pr', 'terra', 'preto/laranja', 'cognac/preto', 'bronze', 'beige', 'veneto/preto', 'zagora/preto', 'mokka/preto', 'taupe/preto', 'sonoma/preto', 'preto/preto']
-    colors_en = ['black', 'white', 'blue', 'red', 'grey', 'silver', 'orange', 'green', 'bluestone', 'aqua', 'burgundy', 'anthrazit', 'truffle', 'brown', 'oyster', 'tobacco', 'jatoba', 'storm', 'champagne', 'cedar', 'silverstone', 'chestnut', 'kaschmirsilber', 'oak', 'mokka']
-    # Que cor é esta? ['sparkling', 'storm', 'metalizada', 'brilhante']
+    df.loc[:, 'Navegação'], df.loc[:, 'Sensores'], df.loc[:, 'Cor_Interior'], df.loc[:, 'Caixa Auto'], df.loc[:, 'Cor_Exterior'], df.loc[:, 'Jantes'] = 0, 0, 0, 0, 0, 0  # New Columns
+    colors_pt = ['preto', 'branco', 'azul', 'verde', 'tartufo', 'vermelho', 'antracite/vermelho', 'dacota', 'anthtacite/preto', 'preto/laranja/preto/lara', 'prata/cinza', 'cinza', 'preto/silver', 'cinzento', 'prateado', 'prata', 'amarelo', 'laranja', 'castanho', 'dourado', 'antracit', 'antracite/preto', 'antracite/cinza/preto', 'branco/outras', 'antracito', 'dakota', 'antracite', 'antracite/vermelho/preto', 'oyster/preto', 'prata/preto/preto', 'âmbar/preto/pr', 'bege', 'terra', 'preto/laranja', 'cognac/preto', 'bronze', 'beige', 'beje', 'veneto/preto', 'zagora/preto', 'mokka/preto', 'taupe/preto', 'sonoma/preto', 'preto/preto', 'preto/laranja/preto']
+    colors_en = ['black', 'havanna', 'merino', 'vernasca', 'walnut', 'chocolate', 'nevada', 'vernasca', 'moonstone', 'anthracite/silver', 'white', 'coffee', 'blue', 'red', 'grey', 'silver', 'orange', 'green', 'bluestone', 'aqua', 'burgundy', 'anthrazit', 'truffle', 'brown', 'oyster', 'tobacco', 'jatoba', 'storm', 'champagne', 'cedar', 'silverstone', 'chestnut', 'kaschmirsilber', 'oak', 'mokka']
 
     df_grouped = df.groupby('Nº Stock')
     for key, group in df_grouped:
@@ -66,6 +69,7 @@ def db_creation(df):
         ### Cor Interior
         line_interior = group['Interior'].head(1).values[0]
         tokenized_interior = nltk.word_tokenize(line_interior)
+        # print(tokenized_interior)
 
         color_interior = [x for x in colors_pt if x in tokenized_interior]
 
@@ -88,10 +92,32 @@ def db_creation(df):
                 color_interior = ['dakota']
             if 'nevada' in tokenized_interior:
                 color_interior = ['nevada']
+            if 'preto' and 'antracite' in tokenized_interior:
+                color_interior = ['preto/antracite']
+            if 'beje' and 'havanna' in tokenized_interior:
+                color_interior = ['beje']
+            if 'bege' and 'veneto' in tokenized_interior:
+                color_interior = ['bege']
+            if 'bege' and 'preto' in tokenized_interior:
+                color_interior = ['bege']
+            if 'bege' and 'sonoma/preto' in tokenized_interior:
+                color_interior = ['bege']
+            if 'dacota' and 'bege' in tokenized_interior:
+                color_interior = ['dakota']
+            if 'bege' and 'zagora/preto' in tokenized_interior:
+                color_interior = ['bege']
+            if 'bege' and 'veneto' in tokenized_interior:
+                color_interior = ['bege']
+            if 'vernasca' and 'anthtacite/preto':
+                color_interior = ['vernasca']
             # print('Changed to:', color_interior)
 
         color_interior = color_interior * group.shape[0]
-        df.loc[df['Nº Stock'] == key, 'Cor_Interior'] = color_interior
+        try:
+            df.loc[df['Nº Stock'] == key, 'Cor_Interior'] = color_interior
+        except ValueError:
+            print(key, '\n', color_interior)
+            continue
 
         ### Jantes
         for line_options in group['Opcional']:
@@ -115,16 +141,21 @@ def db_creation(df):
 
 def symbol_replacer(df):
 
-    df['Interior'] = df['Interior'].str.replace('|', '/')
-    df['Cor'] = df['Cor'].str.replace('|', '')
-    df['Interior'] = df['Interior'].str.replace('ind.', '')
+    df.loc[:, 'Interior'] = df['Interior'].str.replace('|', '/')
+    df.loc[:, 'Cor'] = df['Cor'].str.replace('|', '')
+    df.loc[:, 'Interior'] = df['Interior'].str.replace('ind.', '')
+    df.loc[:, 'Interior'] = df['Interior'].str.replace(']', '/')
+    df.loc[:, 'Interior'] = df['Interior'].str.replace('.', ' ')
+    df.loc[:, 'Interior'] = df['Interior'].str.replace('\'merino\'', 'merino')
+    df.loc[:, 'Interior'] = df['Interior'].str.replace('\' merino\'', 'merino')
+    df.loc[:, 'Interior'] = df['Interior'].str.replace('\'vernasca\'', 'vernasca')
 
     return df
 
 
 def db_color_replacement(df):
     color_types = ['Cor_Interior', 'Cor_Exterior']
-    colors_to_replace = {'black': 'preto', 'white': 'branco', 'blue': 'azul', 'red': 'vermelho', 'grey': 'cinzento', 'silver': 'prateado', 'orange': 'laranja', 'green': 'verde', 'anthrazit': 'antracite', 'antracit': 'antracite', 'brown': 'castanho', 'antracito': 'antracite', 'âmbar/preto/pr': 'ambar/preto/preto', 'beige': 'bege', 'kaschmirsilber': 'cashmere'}
+    colors_to_replace = {'black': 'preto', 'preto/silver': 'preto/prateado', 'tartufo': 'truffle', 'preto/laranja/preto/lara': 'preto/laranja', 'dacota': 'dakota', 'white': 'branco', 'blue': 'azul', 'red': 'vermelho', 'grey': 'cinzento', 'silver': 'prateado', 'orange': 'laranja', 'green': 'verde', 'anthrazit': 'antracite', 'antracit': 'antracite', 'brown': 'castanho', 'antracito': 'antracite', 'âmbar/preto/pr': 'ambar/preto/preto', 'beige': 'bege', 'kaschmirsilber': 'cashmere', 'beje': 'bege'}
 
     unknown_ext_colors = df[df['Cor_Exterior'] == 0]['Cor'].unique()
     unknown_int_colors = df[df['Cor_Interior'] == 0]['Interior'].unique()
@@ -160,10 +191,10 @@ def db_score_calculation(df):
 
 
 def db_duplicate_removal(df):
-    cols_to_drop = ['CdCor', 'Cor', 'CdInt', 'Interior', 'Versão', 'Opcional', 'A', 'S', 'Custo', 'Data Compra', 'Data Venda', 'Vendedor', 'Canal de Venda']
+    cols_to_drop = ['Cor', 'Interior', 'Versão', 'Opcional', 'A', 'S', 'Custo', 'Data Compra', 'Data Venda', 'Vendedor', 'Canal de Venda']
     # Will probably need to also remove: stock_days, stock_days_norm, and one of the scores
     df = df.drop_duplicates(subset='Nº Stock')
-    df.drop(cols_to_drop, axis=1, inplace=True)
+    df = df.drop(cols_to_drop, axis=1)
     df.index = range(df.shape[0])
 
     return df
@@ -173,29 +204,29 @@ def main():
     start = time.time()
     print('Creating DB...')
 
-    # full_db = 'output/' + 'db_full_baviera.csv'
-    full_db = 'output/' + 'full_testing.csv'
-    # stock_opt_db = 'output/' + 'db_baviera_stock_optimization.csv'
-    stock_opt_db = 'output/' + 'testing.csv'
-    input_file = 'sql_db/' + 'Opcionais Baviera.csv'
-    # input_file = 'output/' + 'small_test.csv'
+    years_15_16 = 1
+
+    if years_15_16:
+        full_db = 'output/' + 'db_full_baviera_15_16.csv'
+        stock_opt_db = 'output/' + 'db_baviera_stock_optimization_15_16.csv'
+        input_file = 'sql_db/' + 'Opcionais Baviera 15_16.csv'
+    if not years_15_16:
+        full_db = 'output/' + 'db_full_baviera.csv'
+        stock_opt_db = 'output/' + 'db_baviera_stock_optimization.csv'
+        input_file = 'sql_db/' + 'Opcionais Baviera.csv'
 
     if os.path.isfile(full_db):
         os.remove(full_db)
 
-    df = pd.read_csv(input_file, delimiter=';', parse_dates=['Data Compra', 'Data Venda'], infer_datetime_format=True, decimal=',').dropna()
+    df = pd.read_csv(input_file, delimiter=';', parse_dates=['Data Compra', 'Data Venda'], infer_datetime_format=True, decimal=',')
     df_initial = db_creation(df)
     df_second_step = db_color_replacement(df_initial)
     df_third_step = db_score_calculation(df_second_step)
     df_final = db_duplicate_removal(df_third_step)
 
-    sel_cols = ['Modelo', 'Local da Venda', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'Tipo Encomenda', 'stock_days', 'Margem', 'margem_percentagem']
-    # df_final[['Modelo', 'Prov', 'Local da Venda', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'Tipo Encomenda', 'stock_days', 'Margem', 'margem_percentagem']].to_csv(stock_opt_db)
+    sel_cols = ['Modelo', 'Local da Venda', 'Prov', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'stock_days', 'Margem', 'margem_percentagem']
     save_csv(df_final[sel_cols], stock_opt_db)
 
-    # if os.path.isfile(full_db):
-    #     os.remove(full_db)
-    # df_final.to_csv(full_db)
     save_csv(df_final, full_db)
 
     print('Runnning time: %.2f' % (time.time() - start))

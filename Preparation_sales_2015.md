@@ -1,4 +1,4 @@
-# Stock Optimization
+# Stock Optimization - Sales 2015
 
 ## Feature Treatment:  
 
@@ -10,7 +10,7 @@ Before:
 Grouping of values 'Viaturas Km 0' and 'Em Utilização', drop of 'Demonstração' and 'Em Utilização':
 
 After:  
-![](./output/prov_after.png)
+![](./output/prov_after_mini_removal.png)
 
 
 Column - **Cor_Exterior**: 
@@ -32,7 +32,7 @@ others = ['jatoba', 'aqua', 'storm', 'cedar', 'bronze', 'chestnut', 'cashmere', 
 ```
 
 After:  
-![](./output/cor_exterior_after.png)
+![](./output/cor_exterior_after_mini_removal.png)
 
 
 Column - **Cor_Interior**:   
@@ -49,7 +49,7 @@ others = ['branco', 'oyster', 'bege', 'oyster/preto', 'azul', 'cinzento', 'truff
 ```
 
 After:  
-![](./output/cor_interior_after.png)
+![](./output/cor_interior_after_mini_removal.png)
 
 
 Column - **Tipo Encomenda**  
@@ -75,7 +75,7 @@ nineteen_or_twenty_pol = ['19', '20']
 ```
 
 After:  
-![](./output/jantes_after.png)
+![](./output/jantes_after_mini_removal.png)
 
 Column - **Local da Venda**  
 Before:  
@@ -92,7 +92,7 @@ motorcycles = ['DCA - Motos Faro', 'DCS- Vendas Motas', 'DCC - Motos Aveiro']
 ```
 
 After:  
-![](./output/local_da_venda_after.png)
+![](./output/local_da_venda_after_mini_removal.png)
 
 
 Column - **Modelo**  
@@ -121,7 +121,7 @@ outros = ['S2 Cabrio', 'S2 Gran Tourer', 'S2 Coupé', 'S3 Gran Turismo', 'S4 Cou
 ```
 
 After:  
-![](./output/modelo_after.png)
+![](./output/modelo_after_mini_removal.png)
 
 Aditional preprocessing:
 

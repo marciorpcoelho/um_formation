@@ -7,15 +7,16 @@ import re
 import time
 import pydotplus
 import matplotlib.pyplot as plt
-from sklearn.model_selection import GridSearchCV
 from sklearn import tree, linear_model, ensemble, svm, neighbors
+from sklearn.neural_network import MLPClassifier
+from sklearn.model_selection import GridSearchCV
 from sklearn.naive_bayes import GaussianNB
 from sklearn.feature_selection import SelectKBest, chi2, f_classif, mutual_info_classif
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.tree import export_graphviz
 from sklearn.metrics import confusion_matrix, classification_report, f1_score, accuracy_score
-from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, BaggingClassifier
 from sklearn.cluster import KMeans, MiniBatchKMeans, AffinityPropagation, SpectralClustering, Birch
 from io import StringIO
 from imblearn.over_sampling import RandomOverSampler, SMOTE
@@ -50,7 +51,7 @@ def main():
     if regression:
         target = ['margem_percentagem']
     # possible targets = ['stock_class1', 'stock_class2', 'margem_class1', 'score_class', 'new_score']
-    oversample = 0
+    oversample = 1
 
     k = 10
     feat_sel_check = None
@@ -58,17 +59,19 @@ def main():
     # feature_selection_criteria = f_classif
     feature_selection_criteria = mutual_info_classif
 
-    # models = ['dt']
+    models = ['dt']
     # models = ['rf']
     # models = ['lr']
     # models = ['knn']
     # models = ['svm']
     # models = ['ab']
     # models = ['gc']
-    # models = ['voting']
     # models = ['bayes']
+    # models = ['bagging']
+    # models = ['voting']
+    # models = ['neural']
     # models = ['dt', 'rf', 'lr', 'knn', 'svm', 'ab', 'gc', 'bayes', 'voting']
-    models = ['dt', 'rf', 'lr', 'svm', 'ab', 'gc', 'bayes', 'voting']
+    # models = ['dt', 'rf', 'lr', 'svm', 'ab', 'gc', 'bayes', 'voting']
 
     # if oversample:
     #     print('OVERSAMPLE 1')
@@ -111,13 +114,13 @@ def database_preparation(oversample, target_column, feat_sel_check, feature_sele
     cols_to_use = ['Unnamed: 0', 'Modelo', 'Prov', 'Local da Venda', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'stock_days', 'Margem', 'margem_percentagem']
     ohe_cols = ['Jantes_new', 'Cor_Interior_new', 'Cor_Exterior_new', 'Local da Venda_new', 'Modelo_new', 'Prov_new']
 
-    # df = pd.read_csv('output/' + 'db_baviera_stock_optimization.csv', usecols=cols_to_use, encoding='utf-8', delimiter=',', index_col=0, dtype=dtypes)
-    df = pd.read_csv('output/' + 'full_testing.csv', usecols=cols_to_use, encoding='utf-8', delimiter=',', index_col=0, dtype=dtypes)
+    df = pd.read_csv('output/' + 'db_baviera_stock_optimization.csv', usecols=cols_to_use, encoding='utf-8', delimiter=',', index_col=0, dtype=dtypes)
+    df2 = pd.read_csv('output/' + 'db_baviera_stock_optimization_15_16.csv', usecols=cols_to_use, encoding='utf-8', delimiter=',', index_col=0, dtype=dtypes)
+    df = db_merge(df, df2)
     df = database_cleanup(df)
     df, targets = db_score_calculation(df, targets)
 
     col_group(df)
-
     targets += class_creation(df)
 
     df_ohe = df.copy(deep=True)
@@ -133,6 +136,12 @@ def database_preparation(oversample, target_column, feat_sel_check, feature_sele
     df_train_x, df_train_y, df_test_x, df_test_y = dataset_split(df_ohe, target_column, oversample)
 
     return df, df_train_x, df_train_y, df_test_x, df_test_y, ohe_cols, non_targets
+
+
+def db_merge(df, df2):
+    df_all = pd.concat([df, df2])
+
+    return df_all
 
 
 def feature_selection(df, features, target_column, feature_number, feature_selection_criteria):
@@ -176,16 +185,20 @@ def stock_optimization_classification(df, name, model, k, score, train_x, train_
         clf, clf_best = gradient_classifier(train_x, train_y, k, score)
     if model == 'bayes':
         clf, clf_best = bayesian_classifier(train_x, train_y, k, score)
+    if model == 'bagging':
+        clf, clf_best = bagging_classifier(train_x, train_y, k, score)
     if model == 'voting':
         clf, clf_best = voting_method(train_x, train_y, k, score, name)
+    if model == 'neural':
+        clf = neural_network(train_x, train_y, test_x, test_y, k, score, name)
 
     prediction_trainer, prediction_test = performance_evaluation(clf, clf_best, train_x, train_y, test_x, test_y, name, start)
     if oversample:
         train_x['oversample_flag'], train_x['original_index'] = oversample_flag_backup, original_index_backup
 
-    # df_final = prediction_probabilities(clf_best, df, model, train_x, test_x, train_y, test_y, oversample, ohe_cols, prediction_trainer, prediction_test, feat_sel_check)
-    # df_new_data = new_columns(df_final)
-    # save_csv(df_new_data, 'output/db_final_' + str(name) + '.csv')
+    df_final = prediction_probabilities(clf_best, df, model, train_x, test_x, train_y, test_y, oversample, ohe_cols, prediction_trainer, prediction_test, feat_sel_check)
+    df_new_data = new_columns(df_final)
+    save_csv(df_new_data, 'output/db_final_' + str(name) + '.csv')
 
 
 def new_columns(df):
@@ -232,6 +245,58 @@ def voting_method(train_x, train_y, k, score, name):
 
     return vote_clf, vote_clf_best
 
+
+def nonlin(x, deriv=False):
+    if deriv:
+        return x*(1-x)
+    return 1/(1+np.exp(-x))
+
+
+def neural_network(train_x, train_y, test_x, test_y, k, score, name, voting=0):
+    print('### Neural Networks ###')
+
+    # v2
+    clf = MLPClassifier(solver='sgd', alpha=1e-5, activation='relu', random_state=1)
+    clf.fit(train_x, train_y)
+    prediction = clf.predict(test_x)
+
+    print('micro', f1_score(test_y, prediction, average='micro', labels=np.unique(prediction)))
+    print('macro', f1_score(test_y, prediction, average='macro', labels=np.unique(prediction)))
+    print('accuracy', accuracy_score(test_y, prediction))
+    print('CR', '\n', classification_report(test_y, prediction))
+
+    # v1
+    # np.random.seed(42)
+    # syn0 = 2*np.random.random((train_x.shape[1], train_x.shape[0])) - 1
+    # syn1 = 2*np.random.random((train_x.shape[0], 1)) - 1
+    #
+    # for i in range(2):
+    #     start = time.time()
+    #     l0 = train_x
+    #     l1 = nonlin(np.dot(l0, syn0))
+    #     l2 = nonlin(np.dot(l1, syn1))
+    #
+    #     l2_error = np.array(train_y) - l2
+    #
+    #     l2_delta = l2_error * nonlin(l2, True)
+    #
+    #     l1_error = l2_delta.dot(syn1)
+    #
+    #     l1_delta = l1_error * nonlin(l1, True)
+    #
+    #     # if not i % 100:
+    #     print('Error:', str(np.mean(np.abs(l1_error))))
+    #     print('Error:', str(np.mean(np.abs(l2_error))))
+    #
+    #     syn1 = syn1 + l1.T.dot(l2_delta)
+    #     syn0 = syn0 + l0.T.dot(l1_delta)
+    #     # syn0 = syn0 + np.dot(np.array(l0.T), l1_delta)  # Weird Numpy error does not allow me to use a += b instead of a = a + b.
+    #
+    #     print('Running time: %.2f' % (time.time() - start))
+    #
+    # print(np.around(l1), '\n', np.unique(np.around(l1), return_counts=True))
+
+    return clf
 
 def decision_tree(train_x, train_y, k, score, name, voting=0):
     print('### Decision Tree ###')
@@ -352,6 +417,63 @@ def bayesian_classifier(train_x, train_y, k, score, voting=0):
     return gnb, gnb_best
 
 
+def bagging_classifier(train_x, train_y, k, score, voting=0):
+    print('### Bagging ###')
+
+    # Random Forest:
+    # bag = ClassFit(clf=BaggingClassifier)
+    # tuned_parameters_bag = {'base_estimator__n_estimators': [10, 25, 50, 100], 'base_estimator__max_depth': [5, 10, 20], 'base_estimator__class_weight': ['balanced'], 'max_samples': [0.005, 0.1, 0.2, 0.5]}
+    # bag_2 = GridSearchCV(BaggingClassifier(RandomForestClassifier(), n_estimators=100, max_features=0.5), param_grid=tuned_parameters_bag, cv=k, scoring=score)
+    # bag_2.fit(train_x, train_y)
+    # bag_best = BaggingClassifier(RandomForestClassifier(n_estimators=bag_2.best_params_['base_estimator__n_estimators'], max_depth=bag_2.best_params_['base_estimator__max_depth'], class_weight=bag_2.best_params_['base_estimator__class_weight']))
+    # bag_best.fit(train_x, train_y)
+
+    # Bayesian Classifier:
+    # bag = ClassFit(clf=GaussianNB)
+    # tuned_parameters_bag = {'max_samples': [0.005, 0.1, 0.2, 0.5]}
+    # bag_2 = GridSearchCV(BaggingClassifier(GaussianNB(), n_estimators=100, max_features=0.5), param_grid=tuned_parameters_bag, cv=k, scoring=score)
+    # bag_2.fit(train_x, train_y)
+    # bag_best = BaggingClassifier(GaussianNB())
+    # bag_best.fit(train_x, train_y)
+
+    # tuned_parameters_svc = [{'C': np.logspace(-2, 2, 10)}]
+    # svc = ClassFit(clf=svm.LinearSVC)
+    # svc.grid_search(parameters=tuned_parameters_svc, k=k, score=score)
+    # svc.clf_fit(x=train_x, y=train_y)
+
+    # SVM
+    # bag = ClassFit(clf=svm.LinearSVC)
+    # tuned_parameters_svm = {'base_estimator__C': np.logspace(-2, 2, 10), 'max_samples': [0.005, 0.1, 0.2, 0.5]}
+    # bag_2 = GridSearchCV(BaggingClassifier(svm.LinearSVC(), n_estimators=100, max_features=0.5), param_grid=tuned_parameters_svm, cv=k, scoring=score)
+    # bag_2.fit(train_x, train_y)
+    # bag_best = BaggingClassifier(svm.LinearSVC(C=bag_2.best_params_['base_estimator__C']))
+    # bag_best.fit(train_x, train_y)
+
+    # LR
+    # bag = ClassFit(clf=linear_model.LogisticRegression)
+    # tuned_parameters_lr = {'base_estimator__C': np.logspace(-2, 2, 10), 'max_samples': [0.005, 0.1, 0.2, 0.5]}
+    # bag_2 = GridSearchCV(BaggingClassifier(linear_model.LogisticRegression(), n_estimators=100, max_features=0.5), param_grid=tuned_parameters_lr, cv=k, scoring=score)
+    # bag_2.fit(train_x, train_y)
+    # bag_best = BaggingClassifier(linear_model.LogisticRegression(C=bag_2.best_params_['base_estimator__C']))
+    # bag_best.fit(train_x, train_y)
+
+    # GC
+    # bag = ClassFit(clf=ensemble.GradientBoostingClassifier)
+    # tuned_parameters_gc = {'base_estimator__n_estimators': [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]}
+    # bag_2 = GridSearchCV(BaggingClassifier(ensemble.GradientBoostingClassifier(), n_estimators=100, max_features=0.5), param_grid=tuned_parameters_gc, cv=k, scoring=score)
+    # bag_2.fit(train_x, train_y)
+    # bag_best = BaggingClassifier(ensemble.GradientBoostingClassifier(n_estimators=bag_2.best_params_['base_estimator__n_estimators']))
+    # bag_best.fit(train_x, train_y)
+
+    # Adaboost
+    bag = ClassFit(clf=AdaBoostClassifier)
+    tuned_parameters_ada = {'base_estimator__n_estimators': [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]}
+    bag_2 = GridSearchCV(BaggingClassifier(AdaBoostClassifier(), n_estimators=100, max_features=0.5), param_grid=tuned_parameters_ada, cv=k, scoring=score)
+    bag_2.fit(train_x, train_y)
+    bag_best = BaggingClassifier(AdaBoostClassifier(n_estimators=bag_2.best_params_['base_estimator__n_estimators']))
+    bag_best.fit(train_x, train_y)
+
+    return bag, bag_best
 
 
 def prediction_probabilities(clf, df, model, train_x, test_x, train_y, test_y, oversample, ohe_cols, prediction_trainer, prediction_test, feat_sel_check):
@@ -633,18 +755,15 @@ def dtype_checkup(train_x_resampled, train_x):
 def col_group(df):
     # Cor_Exterior
     color_ext_grouping(df)
-    # column_grouping(df, column='Cor_Exterior', values_to_keep=['preto', 'cinzento', 'branco', 'azul'])
     # value_count_histogram(df, 'Cor_Exterior', 'cor_exterior_before')
     # value_count_histogram(df, 'Cor_Exterior_new', 'cor_exterior_after_mini_removal')
 
     # Cor_Interior
     color_int_grouping(df)
-    # column_grouping(df, column='Cor_Interior', values_to_keep=['preto', 'antracite', 'dakota', 'antracite/cinza/preto'])
     # value_count_histogram(df, 'Cor_Interior', 'cor_interior_before')
     # value_count_histogram(df, 'Cor_Interior_new', 'cor_interior_after_mini_removal')
 
     # Jantes
-    # column_grouping(df, column='Jantes', values_to_keep=['standard', '17', '18', '19'])
     jantes_grouping(df)
     # value_count_histogram(df, 'Jantes', 'jantes_before')
     # value_count_histogram(df, 'Jantes_new', 'jantes_after_mini_removal')
@@ -682,7 +801,7 @@ def color_ext_grouping(df):
     vermelho_laranja = ['vermelho', 'laranja']
     burgundy = ['burgundy']
     castanho = ['castanho']
-    others = ['jatoba', 'aqua', 'storm', 'cedar', 'bronze', 'chestnut', 'cashmere', 'champagne', 'dourado', 'amarelo', 'bege', 'silverstone']
+    others = ['jatoba', 'aqua', 'storm', 'cedar', 'bronze', 'chestnut', 'havanna', 'cashmere', 'champagne', 'dourado', 'amarelo', 'bege', 'silverstone', 'moonstone']
 
     groups = [preto, cinzento, branco, azul, verde, vermelho_laranja, burgundy, castanho, others]
     groups_name = ['preto', 'cinzento', 'branco', 'azul', 'verde', 'vermelho/laranja', 'burgundy', 'castanho', 'outros']
@@ -696,13 +815,13 @@ def color_ext_grouping(df):
 def color_int_grouping(df):
 
     preto = ['preto', 'prata/preto/preto', 'veneto/preto', 'preto/preto', 'ambar/preto/preto']
-    antracite = ['antracite', 'antracite/cinza/preto', 'antracite/preto', 'antracite/vermelho/preto']
-    castanho = ['dakota', 'castanho', 'oak', 'terra', 'mokka']
+    antracite = ['antracite', 'antracite/cinza/preto', 'antracite/preto', 'antracite/vermelho/preto', 'antracite/vermelho', 'anthtacite/preto', 'anthracite/silver']
+    castanho = ['dakota', 'castanho', 'oak', 'terra', 'mokka', 'vernasca']
     # cinzento = ['cinzento']
     # azul = ['azul']
     # bege = ['oyster','bege','oyster/preto']
     # branco = ['branco']
-    others = ['branco', 'oyster', 'bege', 'oyster/preto', 'azul', 'cinzento', 'truffle', 'burgundy', 'zagora/preto', 'sonoma/preto', 'laranja', 'taupe/preto', 'vermelho', 'silverstone', 'nevada', 'cognac/preto', 'preto/laranja']
+    others = ['champagne', 'branco', 'oyster', 'prata/cinza', 'bege', 'oyster/preto', 'azul', 'cinzento', 'truffle', 'burgundy', 'zagora/preto', 'sonoma/preto', 'laranja', 'taupe/preto', 'vermelho', 'silverstone', 'nevada', 'cognac/preto', 'preto/laranja', 'preto/prateado']
 
     groups = [preto, antracite, castanho, others]
     groups_name = ['preto', 'antracite', 'castanho', 'outros']
@@ -740,7 +859,7 @@ def sales_place_grouping(df):
     # 2nd grouping:
     centro = ['DCV - Coimbrões', 'DCC - Aveiro']
     norte = ['DCC - Feira', 'DCG - Gaia', 'DCN-Porto', 'DCN-Porto Mini', 'DCG - Gaia Mini', 'DCN-Porto Usados', 'DCG - Gaia Usados', 'DCC - Feira Usados', 'DCC - Aveiro Usados', 'DCC - Viseu Usados']
-    sul = ['DCS-Expo Frotas Busi', 'DCS-V Especiais BMW', 'DCS-V Especiais MINI', 'DCS-Expo Frotas Flee', 'DCS-Cascais', 'DCS-Parque Nações', 'DCS-Parque Nações Mi', 'DCS-24 Jul BMW Usad', 'DCS-Cascais Usados', 'DCS-24 Jul MINI Usad']
+    sul = ['DCS-Expo Frotas Busi', 'DCS-V Especiais BMW', 'DCS-V Especiais MINI', 'DCS-Expo Frotas Flee', 'DCS-Cascais', 'DCS-Parque Nações', 'DCS-Parque Nações Mi', 'DCS-24 Jul BMW Usad', 'DCS-Cascais Usados', 'DCS-24 Jul MINI Usad', 'DCS-Lisboa Usados']
     algarve = ['DCA - Faro', 'DCA - Portimão', 'DCA - Mini Faro', 'DCA -Portimão Usados']
     motorcycles = ['DCA - Motos Faro', 'DCS- Vendas Motas', 'DCC - Motos Aveiro']
 
