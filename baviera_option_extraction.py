@@ -14,7 +14,7 @@ pd.set_option('display.expand_frame_repr', False)
     File name: baviera_option_extraction.py
     Author: Márcio Coelho
     Date created: 30/05/2018
-    Date last modified: 01/06/2018
+    Date last modified: 25/07/2018
     Python Version: 3.6
 '''
 

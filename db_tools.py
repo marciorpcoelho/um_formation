@@ -141,7 +141,7 @@ def df_standardization(df):
     return scaled_matrix
 
 
-def plot_confusion_matrix(test_y, best_model, prediction_test, tag, normalization=0):
+def plot_confusion_matrix(test_y, best_model, prediction_test, tag, normalization=0, output_dir='output/'):
 
     # tn, fp, fn, tp = confusion_matrix(test_y, prediction_test).ravel()
     cm = confusion_matrix(test_y, prediction_test)
@@ -167,14 +167,28 @@ def plot_confusion_matrix(test_y, best_model, prediction_test, tag, normalizatio
     plt.tight_layout()
 
     if normalization:
-        save_fig('confusion_matrix_normalized_' + str(tag))
+        save_fig('confusion_matrix_normalized_' + str(tag), save_dir=output_dir)
     elif not normalization:
-        save_fig('confusion_matrix_' + str(tag))
+        save_fig('confusion_matrix_' + str(tag), save_dir=output_dir)
+
     # plt.show()
     plt.clf()
     plt.close()
 
     return tn, fp, fn, tp
+
+
+def plot_correlation_matrix(x, y, name, output_dir='output/'):
+    x['Y'] = y
+
+    plt.figure(figsize=(2000 / 96, 2000 / 96), dpi=96)
+    plt.matshow(x.corr())
+    plt.xticks(range(len(x.columns)), x.columns)
+    plt.yticks(range(len(x.columns)), x.columns)
+    plt.colorbar()
+    plt.tight_layout()
+    save_fig('correlation_matrix' + str(name), save_dir=output_dir)
+    # plt.show()
 
 
 def feature_selection(df, number_features):

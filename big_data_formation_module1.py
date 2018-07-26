@@ -23,7 +23,7 @@ from sklearn.cluster import KMeans, MiniBatchKMeans, AffinityPropagation, Spectr
 from io import StringIO
 from imblearn.over_sampling import RandomOverSampler, SMOTE
 from imblearn.under_sampling import RandomUnderSampler
-from db_tools import value_count_histogram, graph_component_silhouette, ohe, null_analysis, save_csv, plot_roc_curve, plot_confusion_matrix, save_fig
+from db_tools import value_count_histogram, graph_component_silhouette, ohe, null_analysis, save_csv, plot_roc_curve, plot_confusion_matrix, plot_correlation_matrix
 from classes import ClassFit, ClusterFit, RegFit
 from collections import Counter
 import warnings
@@ -90,7 +90,7 @@ def main():
         name = tag(target, oversample, 'classification', score, feat_sel_check, feature_selection_criteria, model)
 
         df, train_x, train_y, test_x, test_y, ohe_cols, non_targets = database_preparation(oversample, target, feat_sel_check, feature_selection_criteria)
-        # corr_plot(train_x, train_y)
+        # plot_correlation_matrix(train_x, train_y)
         # print(train_x.head(20))
         # sys.exit()
 
@@ -109,17 +109,17 @@ def main():
         print('\nRunning Time: %.2f' % (time.time() - start), 'seconds')
 
 
-def corr_plot(train_x, train_y):
-    train_x['Y'] = train_y
-
-    plt.figure(figsize=(2000 / 96, 2000 / 96), dpi=96)
-    plt.matshow(train_x.corr())
-    plt.xticks(range(len(train_x.columns)), train_x.columns)
-    plt.yticks(range(len(train_x.columns)), train_x.columns)
-    plt.colorbar()
-    plt.tight_layout()
-    save_fig('correlation_matrix')
-    # plt.show()
+# def corr_plot(train_x, train_y):
+#     train_x['Y'] = train_y
+#
+#     plt.figure(figsize=(2000 / 96, 2000 / 96), dpi=96)
+#     plt.matshow(train_x.corr())
+#     plt.xticks(range(len(train_x.columns)), train_x.columns)
+#     plt.yticks(range(len(train_x.columns)), train_x.columns)
+#     plt.colorbar()
+#     plt.tight_layout()
+#     save_fig('correlation_matrix')
+#     # plt.show()
 
 
 def database_preparation(oversample, target_column, feat_sel_check, feature_selection_criteria):
