@@ -1,6 +1,8 @@
 # Stock Optimization - Sales 2015
 
-## Feature Treatment:  
+## Pre-Processement
+
+### Feature Grouping:  
 
 Column - **Prov**:  
 
@@ -28,7 +30,8 @@ verde = ['verde']
 vermelho_laranja = ['vermelho', 'laranja']
 burgundy = ['burgundy']
 castanho = ['castanho']
-others = ['jatoba', 'aqua', 'storm', 'cedar', 'bronze', 'chestnut', 'cashmere', 'champagne', 'dourado', 'amarelo', 'bege', 'silverstone']
+others = ['jatoba', 'aqua', 'storm', 'cedar', 'bronze', 'chestnut', 'havanna', 'cashmere', 'champagne', 'dourado', 'amarelo', 'bege', 'silverstone', 'moonstone']
+
 ```
 
 After:  
@@ -43,9 +46,10 @@ Grouping of values as follows:
 
 ```python
 preto = ['preto', 'prata/preto/preto', 'veneto/preto', 'preto/preto', 'ambar/preto/preto']
-antracite = ['antracite', 'antracite/cinza/preto', 'antracite/preto', 'antracite/vermelho/preto']
-castanho = ['dakota', 'castanho', 'oak', 'terra', 'mokka']
-others = ['branco', 'oyster', 'bege', 'oyster/preto', 'azul', 'cinzento', 'truffle', 'burgundy', 'zagora/preto', 'sonoma/preto', 'laranja', 'taupe/preto', 'vermelho', 'silverstone', 'nevada', 'cognac/preto', 'preto/laranja']
+antracite = ['antracite', 'antracite/cinza/preto', 'antracite/preto', 'antracite/vermelho/preto', 'antracite/vermelho', 'anthtacite/preto', 'anthracite/silver']
+castanho = ['dakota', 'castanho', 'oak', 'terra', 'mokka', 'vernasca']
+others = ['champagne', 'branco', 'oyster', 'prata/cinza', 'bege', 'oyster/preto', 'azul', 'cinzento', 'truffle', 'burgundy', 'zagora/preto', 'sonoma/preto', 'laranja', 'taupe/preto', 'vermelho', 'silverstone', 'nevada', 'cognac/preto', 'preto/laranja', 'preto/prateado']
+
 ```
 
 After:  
@@ -86,9 +90,10 @@ Grouping according to their location as follows:
 ```python
 centro = ['DCV - Coimbrões', 'DCC - Aveiro']
 norte = ['DCC - Feira', 'DCG - Gaia', 'DCN-Porto', 'DCN-Porto Mini', 'DCG - Gaia Mini', 'DCN-Porto Usados', 'DCG - Gaia Usados', 'DCC - Feira Usados', 'DCC - Aveiro Usados', 'DCC - Viseu Usados']
-sul = ['DCS-Expo Frotas Busi', 'DCS-V Especiais BMW', 'DCS-V Especiais MINI', 'DCS-Expo Frotas Flee', 'DCS-Cascais', 'DCS-Parque Nações', 'DCS-Parque Nações Mi', 'DCS-24 Jul BMW Usad', 'DCS-Cascais Usados', 'DCS-24 Jul MINI Usad']
+sul = ['DCS-Expo Frotas Busi', 'DCS-V Especiais BMW', 'DCS-V Especiais MINI', 'DCS-Expo Frotas Flee', 'DCS-Cascais', 'DCS-Parque Nações', 'DCS-Parque Nações Mi', 'DCS-24 Jul BMW Usad', 'DCS-Cascais Usados', 'DCS-24 Jul MINI Usad', 'DCS-Lisboa Usados']
 algarve = ['DCA - Faro', 'DCA - Portimão', 'DCA - Mini Faro', 'DCA -Portimão Usados']
 motorcycles = ['DCA - Motos Faro', 'DCS- Vendas Motas', 'DCC - Motos Aveiro']
+
 ```
 
 After:  
@@ -123,9 +128,30 @@ outros = ['S2 Cabrio', 'S2 Gran Tourer', 'S2 Coupé', 'S3 Gran Turismo', 'S4 Cou
 After:  
 ![](./output/modelo_after_mini_removal.png)
 
-Aditional preprocessing:
+### Data removal:
 
-'Z4' model and motocycle entries were removed as the first is too recent while the latter requires different configurations. 
+'Z4' model, motocycle and Mini entries were removed as the first is too recent while the others require different configurations. 
+
+### Feature Engineering:
+
+In this section, several new features were created in an attempt to give more insights to models to improve the results. These were the generated features and apply to each configuration:
+
+**prev_sales_check:** boolean check for existence of previous sales;
+**number_prev_sales**: the number of previous sales;
+**last_score**: the last score obtained;
+**last_margin**: the last margin obtained;
+**last_stock_days**: the last number of stock days obtained;
+**average_score_global**: the average of the scores obtained;
+**min_score_global**: the minimum score ever obtained;
+**max_score_global**: the maximum score ever obtained;
+**q3_score_global**: the third quartile (0.75) of the distribution of the previous scores;
+**median_score_global**: the second quartile (0.5) of the distribution of the previous scores;
+**q1_score_global**: the first quartile (0.25) of the distribution of the previous scores;
+**prev_score:** the last score obtained;
+**average_score_dynamic:** the mean of all the previous scores;
+**average_score_dynamic_std:** the standard deviation of the mean of all the previous scores;
+**prev_average_score_dynamic:** the mean of all the previous scores before a specific sell is done;
+**prev_average_score_dynamic_std:** the standard deviation of the mean of all the previous scores before a specific sell is done;
 
 ## Feature Selection
 
@@ -144,29 +170,31 @@ Explanations of each metric is followed.
 
 #### **Evaluation Metrics:**  
 
+**Accuracy, [0,1]** - Of all the classified, how many are correct?;
 **Precision, [0,1]** - Of all the classified as a class, how many are correct?;  
-**Recall, [0,1]** - Of the whole class, how many were correctly predicted?;  
-**F1-Score, [0,1]** - Harmonic mean of Precision and Recall;  
-**Accuracy, [0,1]** - Of all the classified, how many are correct?;  
-**Silhouette Value, [-1,1]** - Gives a score to each sample, which measures how close that sample is to the boundary of neighbouring clusters. 
-A value close to +1 indicates the sample is far away from the neighbouring clusters. A value of 0 indicates the sample is on or very close to the decision boundary between two neighbouring clusters,
-and negative values indicate that those samples might have been assigned to the wrong cluster;  
-**Cluster's Size [0, +inf]** - Indicates the number of samples per cluster. Clusters with too many or too few samples are to avoided, and the number of clusters should be changed;  
-**Mean Squared Error [0, 1]** - Returns a measure of the average squared difference between the estimated value and what is estimated.  
-**Coefficient R^2 [-inf, 1]** - Statistical measure of how close the data are to the fitted regression line. The best value is 1, while 0 means the model is constant and takes no input from the data.
-A negative value means the models is arbitrarily worse than the null-hypothesis.
+**Recall/Sensitivity/TPR, [0,1]** - Of the whole positive class, how many were correctly predicted?;
+**Specificity/TNR, [0, 1]**:  Of the whole negative class, how many were correctly predicted?
+**False Positive Rate, [0, 1]:** 1 - TNR
+**F1-Score, [0,1]** - Harmonic mean of Precision and Recall;
+**Micro F1-Score, [0, 1]:** Calculates the precision and recall across all classes counting all the true positives, false negatives and false positives;
+**Macro F1-Score, [0, 1]:** Calculates the precision and recall for each class and calculates its mean;
+
+
 
 #### **Targets:**  
 
 **stock_class1** - converts 'stock_days' to classes, using business limits for each class;  
 **stock_class2** - converts 'stock_days' to classes, using quartile limits for each class;  
 **margem_class1** - converts 'margem_percentagem' to classes, using quartile limits for each class;  
-**score** - normalizes both 'stock_days' and 'margem_percentagem' to scores between [0, 1] and multiplies between them.  
-**score_class** - same as previous one, but the values are separated between 4 even classes. 
+**score_class** - same as previous one, but the values are separated between 4 even classes;
+**score** - normalizes both 'stock_days' and 'margem_percentagem' to scores between [0, 1] and multiplies between them;
+**new_score** - normalizes both 'stock_days' and 'margem_percentagem' to scores between [0, 1] and classifies each one in two classes 0 and 1. Currently, 'stock_days' with class 1 correspond to configurations with less than 30 days in stock, while class 1 in 'margem_percentagem' refers to configurations with a positive margin. After this discretization, the end target will have as class 1 only entries that were previously classified as 1 in both metrics, ensuring minimum values for each dimension;
+
+
 
 ## Classification
 
-Comparison between with and without Oversample:  
+Comparison between with and without Oversample, before feature engineering (2017+ data only): 
 
 Without Oversample:  
 ![](./output/Backup/classification_performance_recall.png)
@@ -177,15 +205,18 @@ With Oversample:
 The results seem to show a higher performance of models when no oversample is applied. This is due to the models with oversample having average results in both classes (~0.6 recall)
 while models without oversample have a very low results on the minority class and high results on the majority class.  
 Focusing on non-oversampled models, Gradient models achieve the best results overall with over 0.85 recall (1.00 on class 1 and 0.00 on class 0), an f1-score of 0.81 (0.93 on class 1 and 0.00 on class 0).
-These results are artificially high as what the model does is to predict all instances as class 1. Virtually useless.  
-
-With Mutual Information as Feature Selection Criteria:
-![](./output/classification_performance_recall_oversampled_mutual_info_classif.png)
-
-With F-Score as Feature Selection Criteria:
-![](./output/classification_performance_recall_oversampled_f_classif.png)
-
-With Chi Squared as Feature Selection Criteria:
-![](./output/classification_performance_recall_oversampled_chi2.png)
+These results are artificially high as what the model does is to predict all instances as class 1. Virtually useless. 
 
 
+
+After this initial approach, more data was made available, new target scores were created and new features were implemented (check above). With these changes, the results are as follows:
+
+![](C:\Users\mrpc\PycharmProjects\um_formation\output\5_classification_performance_target_new_score_scoring_recall.png)
+
+The results show that typically only meta-models (Adaboost, Random Forest and Voting) reach better scores  across all metrics (precision, average recall, F1 score and also recall for both classes). The ROC curve for all these models are:
+
+![](C:\Users\mrpc\PycharmProjects\um_formation\output\roc_curve_classification_voting_target_new_score_scoring_recall.png)
+
+Where again Adaboost, Voting and Random Forest achieve the best results. Looking at the normalized confusion matrices:
+
+![](C:\Users\mrpc\PycharmProjects\um_formation\output\confusion_matrix_normalized_classification_voting_target_new_score_scoring_recall.png)

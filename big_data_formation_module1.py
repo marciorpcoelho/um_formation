@@ -5,8 +5,10 @@ import csv
 import os
 import re
 import time
+import pickle
 import pydotplus
 import matplotlib.pyplot as plt
+from scipy import stats
 from sklearn import tree, linear_model, ensemble, svm, neighbors
 from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import GridSearchCV
@@ -21,7 +23,7 @@ from sklearn.cluster import KMeans, MiniBatchKMeans, AffinityPropagation, Spectr
 from io import StringIO
 from imblearn.over_sampling import RandomOverSampler, SMOTE
 from imblearn.under_sampling import RandomUnderSampler
-from db_tools import value_count_histogram, graph_component_silhouette, ohe, null_analysis, save_csv
+from db_tools import value_count_histogram, graph_component_silhouette, ohe, null_analysis, save_csv, plot_roc_curve, plot_confusion_matrix, save_fig
 from classes import ClassFit, ClusterFit, RegFit
 from collections import Counter
 import warnings
@@ -44,22 +46,31 @@ def main():
     sales_place_models = 0
     clustering = 0
     regression = 0
+
+    retrain_models_check = 1  # If 1, retrains models. If 0, tries to use previously saved models
+
+    # GridSearchCV Scoring Function:
+    # score = 'accuracy'
+    # score = 'roc_auc'
     score = 'recall'
     # score = 'f1_weighted'
 
+    # Target to classify:
     target = ['new_score']
     if regression:
         target = ['margem_percentagem']
     # possible targets = ['stock_class1', 'stock_class2', 'margem_class1', 'score_class', 'new_score']
-    oversample = 1
+    oversample = 0
 
-    k = 10
+    k = 10  # Number of Folds in Stratified Cross-Validation
     feat_sel_check = None
+    # Feature Selection Criteria:
     # feature_selection_criteria = chi2
     # feature_selection_criteria = f_classif
     feature_selection_criteria = mutual_info_classif
 
-    models = ['dt']
+    # Available Models:
+    # models = ['dt']
     # models = ['rf']
     # models = ['lr']
     # models = ['knn']
@@ -70,18 +81,8 @@ def main():
     # models = ['bagging']
     # models = ['voting']
     # models = ['neural']
-    # models = ['dt', 'rf', 'lr', 'knn', 'svm', 'ab', 'gc', 'bayes', 'voting']
-    # models = ['dt', 'rf', 'lr', 'svm', 'ab', 'gc', 'bayes', 'voting']
-
-    # if oversample:
-    #     print('OVERSAMPLE 1')
-    # else:
-    #     print('OVERSAMPLE 0')
-    #
-    # if type(feat_sel_check) == int:
-    #     print('FEAT SEL 1')
-    # else:
-    #     print('FEAT SEL 0')
+    models = ['dt', 'rf', 'lr', 'knn', 'svm', 'ab', 'gc', 'bayes', 'voting']
+    # models = ['dt', 'rf', 'lr', 'ab', 'gc', 'bayes', 'neural', 'voting']
 
     # for feat_sel_check in range(5, 34):
     #     print('Number of current Features Selected:', feat_sel_check)
@@ -89,12 +90,15 @@ def main():
         name = tag(target, oversample, 'classification', score, feat_sel_check, feature_selection_criteria, model)
 
         df, train_x, train_y, test_x, test_y, ohe_cols, non_targets = database_preparation(oversample, target, feat_sel_check, feature_selection_criteria)
+        # corr_plot(train_x, train_y)
+        # print(train_x.head(20))
+        # sys.exit()
 
         if classification:
             if sales_place_models:
                 stock_optimization_sales_place(df, target, start, oversample)  # Models by selling location - shouldn't be needed as the sales place should appear high in the tree;
             if not sales_place_models:
-                stock_optimization_classification(df, name, model, k, score, train_x, train_y, test_x, test_y, ohe_cols, start, oversample, feat_sel_check)  # Classification Approach
+                stock_optimization_classification(df, name, model, k, score, train_x, train_y, test_x, test_y, ohe_cols, start, oversample, feat_sel_check, retrain_models_check)  # Classification Approach
         if clustering:
             stock_optimization_clustering(train_x, train_y, test_x, test_y, method='minibatchkmeans')  # Clustering Approach
         if regression:
@@ -105,27 +109,42 @@ def main():
         print('\nRunning Time: %.2f' % (time.time() - start), 'seconds')
 
 
+def corr_plot(train_x, train_y):
+    train_x['Y'] = train_y
+
+    plt.figure(figsize=(2000 / 96, 2000 / 96), dpi=96)
+    plt.matshow(train_x.corr())
+    plt.xticks(range(len(train_x.columns)), train_x.columns)
+    plt.yticks(range(len(train_x.columns)), train_x.columns)
+    plt.colorbar()
+    plt.tight_layout()
+    save_fig('correlation_matrix')
+    # plt.show()
+
+
 def database_preparation(oversample, target_column, feat_sel_check, feature_selection_criteria):
     print('Preparing database...')
 
     targets = ['margem_percentagem', 'Margem', 'stock_days']
 
-    dtypes = {'Modelo': str, 'Prov': str, 'Local da Venda': str, 'Margem': float, 'Navegação': int, 'Sensores': int, 'Cor_Interior': str, 'Caixa Auto': int, 'Cor_Exterior': str, 'Jantes': str, 'stock_days': int, 'margem_percentagem': float}
-    cols_to_use = ['Unnamed: 0', 'Modelo', 'Prov', 'Local da Venda', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'stock_days', 'Margem', 'margem_percentagem']
-    ohe_cols = ['Jantes_new', 'Cor_Interior_new', 'Cor_Exterior_new', 'Local da Venda_new', 'Modelo_new', 'Prov_new']
+    dtypes = {'Modelo': str, 'Prov': str, 'Local da Venda': str, 'Margem': float, 'Navegação': int, 'Sensores': int, 'Cor_Interior': str, 'Caixa Auto': int, 'Cor_Exterior': str, 'Jantes': str, 'stock_days': int, 'margem_percentagem': float, 'buy_day': str, 'buy_month': str, 'buy_year': str, 'price_total': float}
+    cols_to_use = ['Unnamed: 0', 'Modelo', 'Prov', 'Local da Venda', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'stock_days', 'Margem', 'margem_percentagem', 'buy_day', 'buy_month', 'buy_year', 'sell_day', 'sell_month', 'sell_year', 'price_total']
+    ohe_cols = ['Jantes_new', 'Cor_Interior_new', 'Cor_Exterior_new', 'Local da Venda_new', 'Modelo_new', 'Prov_new', 'buy_day', 'buy_month', 'buy_year']
 
-    df = pd.read_csv('output/' + 'db_baviera_stock_optimization.csv', usecols=cols_to_use, encoding='utf-8', delimiter=',', index_col=0, dtype=dtypes)
-    df2 = pd.read_csv('output/' + 'db_baviera_stock_optimization_15_16.csv', usecols=cols_to_use, encoding='utf-8', delimiter=',', index_col=0, dtype=dtypes)
-    df = db_merge(df, df2)
+    df = pd.read_csv('output/' + 'db_full_baviera.csv', usecols=cols_to_use, encoding='utf-8', delimiter=',', index_col=0, dtype=dtypes)
     df = database_cleanup(df)
     df, targets = db_score_calculation(df, targets)
 
     col_group(df)
+
     targets += class_creation(df)
+    df = new_features(df)
+
+    z_scores_function(df)
+    # df['price_total'] = stats.zscore(df['price_total'])
 
     df_ohe = df.copy(deep=True)
     df_ohe = ohe(df_ohe, ohe_cols)
-    # targets.remove(target_column[0])
     non_targets = [x for x in list(df_ohe) if x not in targets]
 
     if type(feat_sel_check) == int:
@@ -138,10 +157,66 @@ def database_preparation(oversample, target_column, feat_sel_check, feature_sele
     return df, df_train_x, df_train_y, df_test_x, df_test_y, ohe_cols, non_targets
 
 
-def db_merge(df, df2):
-    df_all = pd.concat([df, df2])
+def new_features(df):
+    sel_cols = ['Navegação', 'Sensores', 'Caixa Auto', 'Cor_Exterior_new', 'Cor_Interior_new', 'Jantes_new', 'Modelo_new']
+    df['sell_date'] = pd.to_datetime(df['sell_year'] * 10000 + df['sell_month'] * 100 + df['sell_day'], format='%Y%m%d')
+    df_grouped = df.sort_values(by=['sell_date']).groupby(sel_cols)
+    df = df_grouped.apply(previous_sales_info)
 
-    return df_all
+    # df_grouped2 = df.sort_values(by=['sell_date']).groupby(sel_cols)
+    # for key, group in df_grouped2:
+    #     print(key, '\n', group)
+    #
+    # sys.exit()
+    df.drop(['sell_date', 'sell_day', 'sell_month', 'sell_year'], axis=1, inplace=True)
+
+    return df.fillna(0)  # After doing 3 tests, results seem to be better with fillna(0) instead of dropna() as the extra 1630 lines of data outweights the possible misleading zeros.
+    # return df.dropna()
+
+
+def previous_sales_info(x):
+
+    prev_scores, i = [], 0
+    if len(x) > 1:
+        x['prev_sales_check'] = [0] + [1] * (len(x) - 1)
+        x['number_prev_sales'] = list(range(len(x)))
+        x['last_score'] = x['new_score'].shift(1)
+        x['last_margin'] = x['margem_percentagem'].shift(1)
+        x['last_stock_days'] = x['stock_days'].shift(1)
+
+        for key, row in x.iterrows():
+            prev_scores.append(x.loc[x.index == key, 'new_score'].values.tolist()[0])
+            x.loc[x.index == key, 'average_score_dynamic'] = np.mean(prev_scores)
+            if i == 0:
+                x.loc[x.index == key, 'average_score_dynamic'] = 0
+                i += 1
+
+        x['average_score_dynamic_std'] = np.std(x['average_score_dynamic'])
+        x['prev_average_score_dynamic'] = x['average_score_dynamic'].shift(1)  # New column - This one and following new column boost Adaboost for more than 15% in ROC Area
+        x['prev_average_score_dynamic_std'] = x['average_score_dynamic_std'].shift(1)  # New column
+
+        x['average_score_global'] = x['new_score'].mean()
+        x['min_score_global'] = x['new_score'].min()
+        x['max_score_global'] = x['new_score'].max()
+        x['q3_score_global'] = x['new_score'].quantile(0.75)
+        x['median_score_global'] = x['new_score'].median()
+        x['q1_score_global'] = x['new_score'].quantile(0.25)
+
+    elif len(x) == 0:
+        x['prev_sales_check'] = 0
+        x['number_prev_sales'] = 0
+        x['last_score'] = 0
+        # The reason I'm not filling all the other columns with zeros for the the len(x) == 0 case, is because I have a fillna(0) at the end of the function that called this one.
+
+    return x
+
+
+def z_scores_function(df):
+    cols_to_normalize = ['price_total', 'number_prev_sales', 'last_margin', 'last_stock_days']
+    for col in cols_to_normalize:
+        df[col] = stats.zscore(df[col])
+
+    return df
 
 
 def feature_selection(df, features, target_column, feature_number, feature_selection_criteria):
@@ -162,37 +237,49 @@ def feature_selection(df, features, target_column, feature_number, feature_selec
     return df_new
 
 
-def stock_optimization_classification(df, name, model, k, score, train_x, train_y, test_x, test_y, ohe_cols, start, oversample, feat_sel_check):
+def stock_optimization_classification(df, name, model, k, score, train_x, train_y, test_x, test_y, ohe_cols, start, oversample, feat_sel_check, retrain_models_check):
     print('Classification Approach...')
 
     if oversample:
         oversample_flag_backup, original_index_backup = train_x['oversample_flag'], train_x['original_index']
         train_x.drop(['oversample_flag', 'original_index'], axis=1, inplace=True)
 
-    if model == 'dt':
-        clf, clf_best = decision_tree(train_x, train_y, k, score, name)
-    if model == 'rf':
-        clf, clf_best = random_forest(train_x, train_y, k, score)
-    if model == 'lr':
-        clf, clf_best = logistic_regression(train_x, train_y, k, score)
-    if model == 'knn':
-        clf, clf_best = k_nearest_neighbours(train_x, train_y, k, score)
-    if model == 'svm':
-        clf, clf_best = support_vector_machine(train_x, train_y, k, score)
-    if model == 'ab':
-        clf, clf_best = adaboost_classifier(train_x, train_y, k, score)
-    if model == 'gc':
-        clf, clf_best = gradient_classifier(train_x, train_y, k, score)
-    if model == 'bayes':
-        clf, clf_best = bayesian_classifier(train_x, train_y, k, score)
-    if model == 'bagging':
-        clf, clf_best = bagging_classifier(train_x, train_y, k, score)
-    if model == 'voting':
-        clf, clf_best = voting_method(train_x, train_y, k, score, name)
-    if model == 'neural':
-        clf = neural_network(train_x, train_y, test_x, test_y, k, score, name)
+    # train_x['Y'] = train_y
+    # print(train_x[['average_score_dynamic', 'average_score_dynamic_std', 'average_score_global', 'last_margin', 'last_score', 'last_stock_days', 'max_score_global', 'median_score_global', 'min_score_global', 'number_prev_sales', 'prev_average_score_dynamic', 'prev_average_score_dynamic_std', 'prev_sales_check', 'price_total', 'q1_score_global', 'q3_score_global', 'Y']].head(20))
+
+    # sys.exit()
+
+    if retrain_models_check:
+        if model == 'dt':
+            clf, clf_best = decision_tree(train_x, train_y, k, score, name)
+        if model == 'rf':
+            clf, clf_best = random_forest(train_x, train_y, k, score)
+        if model == 'lr':
+            clf, clf_best = logistic_regression(train_x, train_y, k, score)
+        if model == 'knn':
+            clf, clf_best = k_nearest_neighbours(train_x, train_y, k, score)
+        if model == 'svm':
+            clf, clf_best = support_vector_machine(train_x, train_y, k, score)
+        if model == 'ab':
+            clf, clf_best = adaboost_classifier(train_x, train_y, k, score)
+        if model == 'gc':
+            clf, clf_best = gradient_classifier(train_x, train_y, k, score)
+        if model == 'bayes':
+            clf, clf_best = bayesian_classifier(train_x, train_y, k, score)
+        if model == 'bagging':
+            clf, clf_best = bagging_classifier(train_x, train_y, k, score)
+        if model == 'neural':
+            clf, clf_best = neural_network(train_x, train_y, k, score)
+        if model == 'voting':
+            clf, clf_best = voting_method(train_x, train_y, test_x, test_y, k, score, name)
+
+        save_model(clf, clf_best, model)
+    elif not retrain_models_check:
+        clf, clf_best = load_model(model)
 
     prediction_trainer, prediction_test = performance_evaluation(clf, clf_best, train_x, train_y, test_x, test_y, name, start)
+    if model != 'voting':
+        plot_roc_curve([clf_best], [model], train_x, train_y, test_x, test_y, 'roc_curve_' + name)
     if oversample:
         train_x['oversample_flag'], train_x['original_index'] = oversample_flag_backup, original_index_backup
 
@@ -210,6 +297,30 @@ def new_columns(df):
     return df
 
 
+def save_model(clf, clf_best, model):
+
+    best_model_name = 'models/' + str(model) + '_best.sav'
+    model_name = 'models/' + str(model) + '.sav'
+
+    if os.path.isfile(model_name):
+        os.remove(model_name)
+        os.remove(best_model_name)
+
+    pickle.dump(clf_best, open(best_model_name, 'wb'))
+    pickle.dump(clf, open(model_name, 'wb'))
+
+
+def load_model(model):
+
+    best_model_name = 'models/' + str(model) + '_best.sav'
+    model_name = 'models/' + str(model) + '.sav'
+
+    clf = pickle.load(open(model_name, 'rb'))
+    clf_best = pickle.load(open(best_model_name, 'rb'))
+
+    return clf, clf_best
+
+
 def additional_info(x):
     x['nr_cars_sold'] = len(x)
     x['average_percentage_margin'] = x['margem_percentagem'].mean()
@@ -217,21 +328,18 @@ def additional_info(x):
     return x
 
 
-def voting_method(train_x, train_y, k, score, name):
-    print('### Voting - Training models... ###')
+def voting_method(train_x, train_y, test_x, test_y, k, score, name):
+    print('Voting - Training models:')
 
     _, dt_best = decision_tree(train_x, train_y, k, score, name, voting=1)
     _, rf_best = random_forest(train_x, train_y, k, score, voting=1)
     _, lr_best = logistic_regression(train_x, train_y, k, score, voting=1)
-    # _, svm_best = support_vector_machine(train_x, train_y, k, score, voting=1)
-    # _, ab_best = adaboost_classifier(train_x, train_y, k, score, voting=1)
+    _, svm_best = support_vector_machine(train_x, train_y, k, score, voting=1)
+    _, knn_best = k_nearest_neighbours(train_x, train_y, k, score, voting=1)
+    _, bayes_best = bayesian_classifier(train_x, train_y, k, score, voting=1)
+    _, ab_best = adaboost_classifier(train_x, train_y, k, score, voting=1)
     _, gc_best = gradient_classifier(train_x, train_y, k, score, voting=1)
-
-    # tuned_parameters = {'voting': ['hard', 'soft']}
-    # vote_clf = GridSearchCV(ensemble.VotingClassifier(estimators=[('dt', dt_best), ('rf', rf_best), ('lr', lr_best), ('gc', gc_best)]), param_grid=tuned_parameters)
-    # vote_clf.fit(train_x, train_y)
-    # vote_clf_best = ensemble.VotingClassifier(estimators=[('dt', dt_best), ('rf', rf_best), ('lr', lr_best), ('gc', gc_best)], voting=vote_clf.best_params_['voting'])
-    # vote_clf_best.fit(train_x, train_y)
+    _, nn_best = neural_network(train_x, train_y, k, score, voting=1)
 
     print('### Voting ###')
 
@@ -243,6 +351,11 @@ def voting_method(train_x, train_y, k, score, name):
     vote_clf_best = ensemble.VotingClassifier(estimators=[('dt', dt_best), ('rf', rf_best), ('lr', lr_best), ('gc', gc_best)], voting=vote_clf.grid.best_params_['voting'])
     vote_clf_best.fit(train_x, train_y)
 
+    models = [dt_best, rf_best, lr_best, svm_best, knn_best, ab_best, gc_best, bayes_best, nn_best, vote_clf_best]
+    # models = [dt_best, rf_best, lr_best, ab_best, gc_best, bayes_best, nn_best, vote_clf_best]
+    plot_roc_curve(models, ['Decision Tree', 'Random Forest', 'Log.Reg.', 'SVM', 'KNN', 'Adaboost', 'Gradient Class.', 'Bayesian',  'Neural Networks', 'Voting'], train_x, train_y, test_x, test_y, 'roc_curve_' + name)
+    # plot_roc_curve(models, ['Decision Tree', 'Random Forest', 'Log.Reg.', 'Adaboost', 'Gradient Class.', 'Bayesian',  'Neural Networks', 'Voting'], train_x, train_y, test_x, test_y, 'roc_curve_' + name)
+
     return vote_clf, vote_clf_best
 
 
@@ -252,18 +365,19 @@ def nonlin(x, deriv=False):
     return 1/(1+np.exp(-x))
 
 
-def neural_network(train_x, train_y, test_x, test_y, k, score, name, voting=0):
+def neural_network(train_x, train_y, k, score, voting=0):
     print('### Neural Networks ###')
 
     # v2
-    clf = MLPClassifier(solver='sgd', alpha=1e-5, activation='relu', random_state=1)
-    clf.fit(train_x, train_y)
-    prediction = clf.predict(test_x)
+    tuned_parameters_nn = [{'activation': ['identity', 'logistic', 'tanh', 'relu'], 'alpha': [1e-5], 'solver': ['sgd']}]
+    nn = ClassFit(clf=MLPClassifier)
+    nn.grid_search(parameters=tuned_parameters_nn, k=k, score=score)
+    nn.clf_fit(x=train_x, y=train_y)
 
-    print('micro', f1_score(test_y, prediction, average='micro', labels=np.unique(prediction)))
-    print('macro', f1_score(test_y, prediction, average='macro', labels=np.unique(prediction)))
-    print('accuracy', accuracy_score(test_y, prediction))
-    print('CR', '\n', classification_report(test_y, prediction))
+    nn_best = MLPClassifier(**nn.grid.best_params_)
+
+    if not voting:
+        nn_best.fit(train_x, train_y.values.ravel())
 
     # v1
     # np.random.seed(42)
@@ -296,7 +410,8 @@ def neural_network(train_x, train_y, test_x, test_y, k, score, name, voting=0):
     #
     # print(np.around(l1), '\n', np.unique(np.around(l1), return_counts=True))
 
-    return clf
+    return nn, nn_best
+
 
 def decision_tree(train_x, train_y, k, score, name, voting=0):
     print('### Decision Tree ###')
@@ -347,7 +462,7 @@ def logistic_regression(train_x, train_y, k, score, voting=0):
     return lr, lr_best
 
 
-def k_nearest_neighbours(train_x, train_y, k, score):
+def k_nearest_neighbours(train_x, train_y, k, score, voting=0):
     print('### KNN ###')
 
     tuned_parameters_knn = [{'n_neighbors': np.arange(1, 50, 1)}]
@@ -356,7 +471,8 @@ def k_nearest_neighbours(train_x, train_y, k, score):
     knn.clf_fit(x=train_x, y=train_y)
 
     knn_best = neighbors.KNeighborsClassifier(**knn.grid.best_params_)
-    knn_best.fit(train_x, train_y)
+    if not voting:
+        knn_best.fit(train_x, train_y)
 
     return knn, knn_best
 
@@ -365,13 +481,13 @@ def support_vector_machine(train_x, train_y, k, score, voting=0):
     print('### SVM ###')
 
     tuned_parameters_svc = [{'C': np.logspace(-2, 2, 10)}]
-    svc = ClassFit(clf=svm.LinearSVC)
-    # svc = ClassFit(clf=svm.SVC)  # Note: This performs better (around +5% on test dataset), but at the cost of at least x10 more time. Not worth it for now.
+    # svc = ClassFit(clf=svm.LinearSVC)
+    svc = ClassFit(clf=svm.SVC)  # Note: This performs better (around +5% on test dataset), but at the cost of at least x10 more time. Not worth it for now.
     svc.grid_search(parameters=tuned_parameters_svc, k=k, score=score)
     svc.clf_fit(x=train_x, y=train_y)
 
-    svc_best = svm.LinearSVC(**svc.grid.best_params_)
-    # svc_best = svm.SVC(**svc.grid.best_params_, probability=True)  # If using this model, there's a probability option for each class. Don't forget to adjust the code so this is saved in the final csv.
+    # svc_best = svm.LinearSVC(**svc.grid.best_params_)
+    svc_best = svm.SVC(**svc.grid.best_params_, probability=True)  # If using this model, there's a probability option for each class. Don't forget to adjust the code so this is saved in the final csv.
     if not voting:
         svc_best.fit(train_x, train_y)
 
@@ -517,6 +633,8 @@ def prediction_probabilities(clf, df, model, train_x, test_x, train_y, test_y, o
         #     test_x = pd.concat([test_x, df['Margem']], join='inner', axis=1)
         #     test_x = pd.concat([test_x, df['margem_percentagem']], join='inner', axis=1)
 
+        # plot_roc(test_y, [prob_test_0, prob_test_1])
+
     if model == 'svm':
         probability_trainer = clf.decision_function(train_x).tolist()
         probability_test = clf.decision_function(test_x).tolist()
@@ -582,10 +700,10 @@ def db_score_calculation(df, targets):
 
     df['stock_days_class'] = 0
     # df.loc[df['inv_stock_days_norm'] > 0.97, 'stock_days_class'] = 1
-    df.loc[df['stock_days'] <= 30, 'stock_days_class'] = 1
+    df.loc[df['stock_days'] <= 45, 'stock_days_class'] = 1
     df['margin_class'] = 0
     # df.loc[df['margem_percentagem_norm'] > 0.60, 'margin_class'] = 1
-    df.loc[df['margem_percentagem'] > 0.0, 'margin_class'] = 1
+    df.loc[df['margem_percentagem'] >= 3.5, 'margin_class'] = 1
 
     df.drop(['stock_days_norm', 'inv_stock_days_norm', 'margem_percentagem_norm'], axis=1, inplace=True)
     targets += ['score']
@@ -662,7 +780,7 @@ def database_cleanup(df):
     df = df[~df.Modelo.str.contains('Z4')]  # Removes Z4 Models
     df = df.loc[df['Prov'] != 'Demonstração']  # Removes demo cars
     df = df.loc[df['Prov'] != 'Em utilização']  # Removes cars being used
-    df = df[~df.Modelo.str.contains('MINI')]
+    df = df[~df.Modelo.str.contains('MINI')]  # Removes all Mini's
 
     return df
 
@@ -971,8 +1089,7 @@ def class_creation(df):
 def dataset_split(df, target, oversample=0):
     print('Splitting dataset...')
 
-    df_train, df_test = train_test_split(df, stratify=df[target], random_state=2)  # This ensures that the classes are evenly distributed by train/test datasets;
-    # train_size, test_size = round(df.shape[0] * 0.8), df.shape[0] - round(df.shape[0] * 0.8)  # 80% and 20%
+    df_train, df_test = train_test_split(df, stratify=df[target], random_state=2)  # This ensures that the classes are evenly distributed by train/test datasets; Default split is 0.75/0.25 train/test
 
     df_train_y = df_train[target]
     df_train_x = df_train.drop(target, axis=1)
@@ -991,9 +1108,6 @@ def dataset_split(df, target, oversample=0):
 
 def tag(target, oversample, approach, score, feature_selection_check, feature_selection_criteria, model=None, sales_place=0):
 
-    # if model:
-    #     file_name = str(approach) + '_' + str(model) + '_target_' + str(target[0])
-    # elif not model:
     file_name = str(approach) + '_' + str(model) + '_target_' + str(target[0]) + '_scoring_' + str(score)
     if sales_place:
         file_name += '_' + str(sales_place)
@@ -1063,14 +1177,16 @@ def performance_evaluation(model, best_model, train_x, train_y, test_x, test_y, 
     model.grid_performance(prediction=prediction_test, y=test_y)
     print('Test:', '\n', 'Micro:', model.micro, '\n', 'Macro:', model.macro, '\n', 'Accuracy:', model.accuracy, '\n', 'Class Report', '\n', model.class_report)
 
-    tn, fp, fn, tp = confusion_matrix(test_y, prediction_test).ravel()
+    plot_confusion_matrix(test_y, best_model, prediction_test, name)
+    tn, fp, fn, tp = plot_confusion_matrix(test_y, best_model, prediction_test, name, normalization=1)
+    # tn, fp, fn, tp = confusion_matrix(test_y, prediction_test).ravel()
     # print('Value Counts:', Counter(prediction_test))
-    # print('TN:', tn)
-    # print('FP:', fp)
-    # print('FN:', fn)
-    # print('TP:', tp)
+    print('TN:', tn)
+    print('FP:', fp)
+    print('FN:', fn)
+    print('TP:', tp)
     specificity = tn / (tn + fp)
-    # print('Specificity:', specificity)
+    print('Specificity:', specificity)
 
     class_report_csv(model.class_report, name)
     performance_metrics_csv(model.micro, model.macro, model.accuracy, specificity, name, start)

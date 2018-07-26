@@ -1,7 +1,9 @@
 import pandas as pd
 import numpy as np
 import itertools
+import calendar
 import scipy
+import sys
 from db_tools import null_analysis
 import matplotlib.pyplot as plt
 from db_tools import null_analysis, save_fig
@@ -14,10 +16,10 @@ my_dpi = 96
 
 def main():
     input_dir = 'output/'
-    target = 'score_class'
+    target = 'new_score'
     # possible targets = ['stock_class1', 'stock_class2', 'margem_class1', 'score_class']
     targets = ['stock_class1', 'stock_class2', 'margem_class1', 'score_class']
-    oversample = 1
+    oversample = 0
     score = 'recall'
     # score = 'f1_weighted'
 
@@ -25,8 +27,8 @@ def main():
     # performance_evaluation_plot_all(input_dir, targets)  # 2
     # average_score(input_dir)  # 3
     # score_distribution()  # 4
-    score_distribution_alt()  # 4a
-    # classification_report_plot(input_dir, oversample, score)  # 5
+    # score_distribution_alt()  # 4a
+    classification_report_plot(input_dir, oversample, score, target)  # 5
 
     # feature selection metrics: ['chi2', 'f_classif', 'mutual_info_classif']
     # models: ['dt', 'rf', 'lr', 'knn', 'svm', 'ab', 'gc', 'voting']
@@ -34,6 +36,55 @@ def main():
     # for feat_selection_metric in criterium:
     number_features_min, number_features_max, model, feat_selection_metric = 5, 33, 'dt', 'mutual_info_classif'
     # feature_selection_evaluation(input_dir, number_features_min, number_features_max, feat_selection_metric, model)  # 6
+
+    # sold_cars_evolution(input_dir)
+
+
+# 7
+def sold_cars_evolution(input_dir):
+    print('7 - Evolution of cars sold per month per model')
+
+    df = pd.read_csv(input_dir + 'db_baviera_grouped.csv', index_col=0)
+    print(df.head())
+    sys.exit()
+
+    plt.subplots(figsize=(1000 / my_dpi, 600 / my_dpi), dpi=my_dpi)
+    models_list = list(df['Modelo_new'].unique())
+    models_list.remove('Outros')
+    for model in models_list:
+        number_cars_sold = []
+        for year in [2015, 2016, 2017, 2018]:
+            for month in range(1, 13):
+                df_month = df[(df['Modelo_new'] == model) & (df['sell_year'] == year) & (df['sell_month'] == month)]
+                if year == 2018 and month > 5:
+                    continue
+
+                number_cars_sold.append(df_month.shape[0])
+        print(model, number_cars_sold)
+        plt.plot(number_cars_sold, '-o', label=model)
+
+    all_pairs = []
+    for year in [15, 16, 17, 18]:
+        i = 0
+        for month in ['Jan', 'Fev', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']:
+            i += 1
+            if year == 18 and i > 5:
+                continue
+            pair = [month, year]
+            all_pairs.append(pair[0])
+
+    plt.grid()
+    plt.legend()
+    plt.vlines(x=[11.5, 23.5, 35.5], ymin=0, ymax=85, color='red')
+    plt.ylabel('Number of Sold Cars')
+    plt.xlabel('Month, Year')
+    plt.title('Number of Sold Cars per model, per month')
+    plt.tight_layout()
+    plt.xticks(range(0, 41), all_pairs, rotation=30)
+    wm = plt.get_current_fig_manager()
+    wm.window.wm_geometry("-1500-10")
+    # save_fig('7_sold_cars_per_model_per_month')
+    plt.show()
 
 
 # 6
@@ -71,10 +122,12 @@ def feature_selection_evaluation(input_dir, features_min, features_max, feat_sel
 
 
 # 5
-def classification_report_plot(input_dir, oversample, score):
+def classification_report_plot(input_dir, oversample, score, target):
 
-    models = ['dt', 'rf', 'lr', 'knn', 'svm', 'ab', 'gc', 'voting']
-    models_name = ['Dec. Tree', 'Rand. Forest', 'Log Reg', 'KNN', 'SVM', 'Adaboost', 'Gradient', 'Voting']
+    # models = ['dt', 'rf', 'lr', 'knn', 'svm', 'ab', 'gc', 'voting']
+    models = ['dt', 'rf', 'lr', 'ab', 'gc', 'bayes', 'neural', 'voting']
+    # models_name = ['Dec. Tree', 'Rand. Forest', 'Log Reg', 'KNN', 'SVM', 'Adaboost', 'Gradient', 'Voting']
+    models_name = ['Dec. Tree', 'Rand. Forest', 'Log Reg', 'AdaBoost', 'Gradient', 'Bayes', 'ANN', 'Voting']
     criterium = ['chi2', 'f_classif', 'mutual_info_classif']
     # for criteria in criterium:
     f, ax = plt.subplots(3, figsize=(1400 / my_dpi, 1000 / my_dpi), dpi=my_dpi)
@@ -86,8 +139,8 @@ def classification_report_plot(input_dir, oversample, score):
             # cr = pd.read_csv(input_dir + 'class_report_classification_' + str(model) + '_target_score_class_scoring_' + str(score) + '_oversample_10_features_' + str(criteria) + '.csv', index_col=0)
             # pe = pd.read_csv(input_dir + 'performance_evaluation_classification_' + str(model) + '_target_score_class_scoring_' + str(score) + '_oversample_10_features_' + str(criteria) + '.csv')
         if not oversample:
-            cr = pd.read_csv(input_dir + 'class_report_classification_target_score_class_scoring_' + str(score) + '_' + str(model) + '.csv', index_col=0)
-            pe = pd.read_csv(input_dir + 'performance_evaluation_classification_target_score_class_scoring_' + str(score) + '_' + str(model) + '.csv')
+            cr = pd.read_csv(input_dir + 'class_report_classification_' + str(model) + '_target_' + str(target) + '_scoring_' + str(score) + '.csv', index_col=0)
+            pe = pd.read_csv(input_dir + 'performance_evaluation_classification_' + str(model) + '_target_' + str(target) + '_scoring_' + str(score) + '.csv')
 
         ax[0].plot(pe.loc[0, :][:-1].values)
         ax[1].plot(cr.loc['avg/total', :][:-1].values, label=model_label)
@@ -117,12 +170,12 @@ def classification_report_plot(input_dir, oversample, score):
 
     if oversample:
         ax[0].set_title('Model Performance - Oversampled')
-        save_fig('5_classification_performance_' + str(score) + '_oversampled')
+        save_fig('5_classification_performance_target_' + str(target) + '_scoring_' + str(score) + '_oversampled')
         # ax[0].set_title('Model Performance - Oversampled - ' + str(criteria))
         # save_fig('5_classification_performance_' + str(score) + '_oversampled_' + str(criteria))
     if not oversample:
         ax[0].set_title('Model Performance')
-        save_fig('5_classification_performance_' + str(score))
+        save_fig('5_classification_performance_target_' + str(target) + '_scoring_' + str(score))
         # ax[0].set_title('Model Performance - ' + str(criteria))
         # save_fig('5_classification_performance_' + str(score) + '_' + str(criteria))
 
@@ -192,15 +245,15 @@ def score_distribution():
 
 # 4a
 def score_distribution_alt():
-    stock_days = 0
-    margin = 1
+    stock_days = 1
+    margin = 0
     # f, ax = plt.subplots(figsize=(1400 / my_dpi, 800 / my_dpi), dpi=my_dpi)
 
     dtypes = {'Modelo': str, 'Prov': str, 'Local da Venda': str, 'Margem': float, 'Navegação': int, 'Sensores': int, 'Cor_Interior': str, 'Caixa Auto': int, 'Cor_Exterior': str, 'Jantes': str, 'stock_days': int, 'margem_percentagem': float}
     cols_to_use = ['Unnamed: 0', 'Modelo', 'Prov', 'Local da Venda', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'stock_days', 'Margem', 'margem_percentagem']
 
     # df = pd.read_csv('output/' + 'db_baviera_stock_optimization.csv', usecols=cols_to_use, encoding='utf-8', delimiter=',', index_col=0, dtype=dtypes)
-    df = pd.read_csv('output/' + 'full_testing.csv', usecols=cols_to_use, encoding='utf-8', delimiter=',', index_col=0, dtype=dtypes)
+    df = pd.read_csv('output/' + 'db_full_baviera.csv', usecols=cols_to_use, encoding='utf-8', delimiter=',', index_col=0, dtype=dtypes)
 
     df['stock_days_norm'] = (df['stock_days'] - df['stock_days'].min()) / (df['stock_days'].max() - df['stock_days'].min())
     df['inv_stock_days_norm'] = 1 - df['stock_days_norm']
@@ -221,7 +274,7 @@ def score_distribution_alt():
         ax1 = fig.add_subplot(111)
         ax2 = ax1.twiny()
 
-        new_tick_locations = np.array([df['stock_days'].min(), 10, 30, 60, 90, 120, 150, 180, 200, 300, 400, 500, 600, 700, 800, 900, df['stock_days'].max()])
+        new_tick_locations = np.array([df['stock_days'].min(), 10, 30, 45, 60, 90, 120, 150, 180, 200, 300, 400, 500, 600, 700, 800, 900, df['stock_days'].max()])
         # ax1.plot(bincenters, n, '-')
         ax1.plot(df['stock_days'], range(df.shape[0]), 'o')
         ax1.set_xlabel('Stock Days')
@@ -234,6 +287,7 @@ def score_distribution_alt():
         ax2.set_xlabel('Stock Days Normalized')
 
         ax1.set_ylabel('Absolute Frequency')
+        plt.axvline(x=45, color='red')
         wm = plt.get_current_fig_manager()
         wm.window.wm_geometry("-1500-100")
         plt.grid()
@@ -247,7 +301,7 @@ def score_distribution_alt():
         ax2 = ax1.twiny()
 
         # new_tick_locations = np.array([df['margem_percentagem'].min(), -0.5, 0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, df['margem_percentagem'].max()])
-        new_tick_locations = np.array([df['margem_percentagem'].min(), -0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3, df['margem_percentagem'].max()])
+        new_tick_locations = np.array([df['margem_percentagem'].min(), -10, -5, 0, 3.5, 5, 10, df['margem_percentagem'].max()])
 
         # ax1.plot(bincenters, n, '-')
         ax1.plot(df['margem_percentagem'], range(df.shape[0]), 'o')
@@ -261,6 +315,7 @@ def score_distribution_alt():
         ax2.set_xlabel('Margin Normalized')
 
         ax1.set_ylabel('Absolute Frequency')
+        plt.axvline(x=3.5, color='red')
         wm = plt.get_current_fig_manager()
         wm.window.wm_geometry("-1500-100")
         plt.grid()
@@ -271,10 +326,10 @@ def score_distribution_alt():
 
 def tick_function(X, stock_days, margin):
     if stock_days:
-        V = 1 - ((X - X.min()) / (X.max() - X.min()))
+        v = 1 - ((X - X.min()) / (X.max() - X.min()))
     if margin:
-        V = (X - X.min()) / (X.max() - X.min())
-    return ['%.4f' % z for z in V]
+        v = (X - X.min()) / (X.max() - X.min())
+    return ['%.4f' % z for z in v]
 
 
 # 1

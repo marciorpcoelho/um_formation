@@ -37,6 +37,8 @@ def db_creation(df):
     colors_pt = ['preto', 'branco', 'azul', 'verde', 'tartufo', 'vermelho', 'antracite/vermelho', 'dacota', 'anthtacite/preto', 'preto/laranja/preto/lara', 'prata/cinza', 'cinza', 'preto/silver', 'cinzento', 'prateado', 'prata', 'amarelo', 'laranja', 'castanho', 'dourado', 'antracit', 'antracite/preto', 'antracite/cinza/preto', 'branco/outras', 'antracito', 'dakota', 'antracite', 'antracite/vermelho/preto', 'oyster/preto', 'prata/preto/preto', 'âmbar/preto/pr', 'bege', 'terra', 'preto/laranja', 'cognac/preto', 'bronze', 'beige', 'beje', 'veneto/preto', 'zagora/preto', 'mokka/preto', 'taupe/preto', 'sonoma/preto', 'preto/preto', 'preto/laranja/preto']
     colors_en = ['black', 'havanna', 'merino', 'vernasca', 'walnut', 'chocolate', 'nevada', 'vernasca', 'moonstone', 'anthracite/silver', 'white', 'coffee', 'blue', 'red', 'grey', 'silver', 'orange', 'green', 'bluestone', 'aqua', 'burgundy', 'anthrazit', 'truffle', 'brown', 'oyster', 'tobacco', 'jatoba', 'storm', 'champagne', 'cedar', 'silverstone', 'chestnut', 'kaschmirsilber', 'oak', 'mokka']
 
+    date_cols(df)
+
     df_grouped = df.groupby('Nº Stock')
     for key, group in df_grouped:
         ### Navegação/Sensor/Transmissão
@@ -135,6 +137,8 @@ def db_creation(df):
         else:
             df.loc[df['Modelo'] == line_modelo, 'Modelo'] = ' '.join(tokenized_modelo[:-3])
 
+        df.loc[df['Nº Stock'] == key, 'price_total'] = group['Custo'].sum()
+
     df.loc[df['Jantes'] == 0, 'Jantes'] = 'standard'
     return df
 
@@ -180,7 +184,7 @@ def db_score_calculation(df):
         # print(key, '\n', group)
         total = group['Custo'].sum()
         # print('\n', total)
-        df.loc[df['Nº Stock'] == key, 'margem_percentagem'] = group['Margem'] / total
+        df.loc[df['Nº Stock'] == key, 'margem_percentagem'] = (group['Margem'] / total) * 100
 
     df['margem_percentagem_norm'] = (df['margem_percentagem'] - df['margem_percentagem'].min()) / (df['margem_percentagem'].max() - df['margem_percentagem'].min())
 
@@ -192,6 +196,7 @@ def db_score_calculation(df):
 
 def db_duplicate_removal(df):
     cols_to_drop = ['Cor', 'Interior', 'Versão', 'Opcional', 'A', 'S', 'Custo', 'Data Compra', 'Data Venda', 'Vendedor', 'Canal de Venda']
+    # cols_to_drop = ['Cor', 'Interior', 'Versão', 'Opcional', 'A', 'S', 'Custo', 'Vendedor', 'Canal de Venda']
     # Will probably need to also remove: stock_days, stock_days_norm, and one of the scores
     df = df.drop_duplicates(subset='Nº Stock')
     df = df.drop(cols_to_drop, axis=1)
@@ -200,31 +205,42 @@ def db_duplicate_removal(df):
     return df
 
 
+def date_cols(df):
+    df.loc[:, 'buy_day'] = df['Data Compra'].dt.day
+    df.loc[:, 'buy_month'] = df['Data Compra'].dt.month
+    df.loc[:, 'buy_year'] = df['Data Compra'].dt.year
+    df.loc[:, 'sell_day'] = df['Data Venda'].dt.day
+    df.loc[:, 'sell_month'] = df['Data Venda'].dt.month
+    df.loc[:, 'sell_year'] = df['Data Venda'].dt.year
+
+
 def main():
     start = time.time()
     print('Creating DB...')
 
-    years_15_16 = 1
+    part_1 = 1
+    part_2 = 0
 
-    if years_15_16:
-        full_db = 'output/' + 'db_full_baviera_15_16.csv'
-        stock_opt_db = 'output/' + 'db_baviera_stock_optimization_15_16.csv'
-        input_file = 'sql_db/' + 'Opcionais Baviera 15_16.csv'
-    if not years_15_16:
-        full_db = 'output/' + 'db_full_baviera.csv'
-        stock_opt_db = 'output/' + 'db_baviera_stock_optimization.csv'
-        input_file = 'sql_db/' + 'Opcionais Baviera.csv'
+    input_file = 'sql_db/' + 'ENCOMENDA.csv'
+    full_db = 'output/' + 'db_full_baviera.csv'
+    stock_opt_db = 'output/' + 'db_baviera_stock_optimization.csv'
 
     if os.path.isfile(full_db):
         os.remove(full_db)
 
-    df = pd.read_csv(input_file, delimiter=';', parse_dates=['Data Compra', 'Data Venda'], infer_datetime_format=True, decimal=',')
-    df_initial = db_creation(df)
-    df_second_step = db_color_replacement(df_initial)
-    df_third_step = db_score_calculation(df_second_step)
-    df_final = db_duplicate_removal(df_third_step)
+    # Part 1 - Options Retrieval
+    if part_1:
+        df = pd.read_csv(input_file, delimiter=';', parse_dates=['Data Compra', 'Data Venda'], infer_datetime_format=True, decimal=',')
+        df_initial = db_creation(df)
+        df_second_step = db_color_replacement(df_initial)
+        df_third_step = db_score_calculation(df_second_step)
+        df_final = db_duplicate_removal(df_third_step)
 
-    sel_cols = ['Modelo', 'Local da Venda', 'Prov', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'stock_days', 'Margem', 'margem_percentagem']
+    # # Part 2 - Dataset Preparation
+    # if part_2:
+    #     print()
+
+    sel_cols = ['Modelo', 'Local da Venda', 'Prov', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'buy_day', 'buy_month', 'buy_year', 'sell_day', 'sell_month', 'sell_year', 'price_total', 'stock_days', 'Margem', 'margem_percentagem']
     save_csv(df_final[sel_cols], stock_opt_db)
 
     save_csv(df_final, full_db)

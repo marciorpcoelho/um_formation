@@ -3,6 +3,7 @@ import numpy as np
 import os
 import glob
 import csv
+import itertools
 import matplotlib
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
@@ -10,6 +11,7 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_selection import SelectKBest, mutual_info_regression
 from sklearn.decomposition import FactorAnalysis
+from sklearn.metrics import roc_curve, auc, confusion_matrix
 from gap_statistic import OptimalK
 from xlsxwriter.workbook import Workbook
 my_dpi = 96
@@ -73,6 +75,31 @@ def value_count_histogram(df, column, name, output_dir='output/'):
     # plt.show()
 
 
+def plot_roc_curve(models, models_name, train_x, train_y, test_x, test_y, save_name):
+    # models_name = ['DT', 'RF', 'LR', 'SVM', 'AB', 'GC', 'Bayes', 'Voting']
+    plt.subplots(figsize=(800 / my_dpi, 800 / my_dpi), dpi=my_dpi)
+    for model in models:
+        prob_train_init = model.fit(train_x, train_y).predict_proba(test_x)
+        prob_test_1 = [x[1] for x in prob_train_init]
+        fpr, tpr, _ = roc_curve(test_y, prob_test_1, pos_label=1)
+        roc_auc = auc(fpr, tpr)
+        plt.plot(fpr, tpr, lw=2, label='ROC curve (area = %0.2f)' % roc_auc + ' ' + str(models_name[models.index(model)]))
+
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver operating characteristic per Model')
+    plt.legend(loc="lower right")
+    plt.grid()
+    plt.tight_layout()
+    save_fig(save_name)
+    # plt.show()
+    plt.clf()
+    plt.close()
+
+
 def ohe(df, cols):
 
     for column in cols:
@@ -112,6 +139,42 @@ def df_standardization(df):
     scaled_matrix = scaler.transform(df)
 
     return scaled_matrix
+
+
+def plot_confusion_matrix(test_y, best_model, prediction_test, tag, normalization=0):
+
+    # tn, fp, fn, tp = confusion_matrix(test_y, prediction_test).ravel()
+    cm = confusion_matrix(test_y, prediction_test)
+    tn, fp, fn, tp = cm.ravel()
+    classes = best_model.classes_
+
+    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+    plt.title('Confusion matrix')
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes)
+    plt.yticks(tick_marks, classes)
+
+    if normalization:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, format(cm[i, j], '.2f'), horizontalalignment="center", color="white" if cm[i, j] > thresh else "black")
+
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    plt.tight_layout()
+
+    if normalization:
+        save_fig('confusion_matrix_normalized_' + str(tag))
+    elif not normalization:
+        save_fig('confusion_matrix_' + str(tag))
+    # plt.show()
+    plt.clf()
+    plt.close()
+
+    return tn, fp, fn, tp
 
 
 def feature_selection(df, number_features):
