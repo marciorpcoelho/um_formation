@@ -218,27 +218,22 @@ def main():
     start = time.time()
     print('Creating DB...')
 
-    part_1 = 1
-    part_2 = 0
-
     input_file = 'sql_db/' + 'ENCOMENDA.csv'
+    input_file_2 = ''
     full_db = 'output/' + 'db_full_baviera.csv'
     stock_opt_db = 'output/' + 'db_baviera_stock_optimization.csv'
 
-    if os.path.isfile(full_db):
-        os.remove(full_db)
+    new_data_check = 0
 
-    # Part 1 - Options Retrieval
-    if part_1:
-        df = pd.read_csv(input_file, delimiter=';', parse_dates=['Data Compra', 'Data Venda'], infer_datetime_format=True, decimal=',')
-        df_initial = db_creation(df)
-        df_second_step = db_color_replacement(df_initial)
-        df_third_step = db_score_calculation(df_second_step)
-        df_final = db_duplicate_removal(df_third_step)
+    df = pd.read_csv(input_file, delimiter=';', parse_dates=['Data Compra', 'Data Venda'], infer_datetime_format=True, decimal=',')
+    if new_data_check:
+        df2 = pd.read_csv(input_file_2, delimiter=';', parse_dates=['Data Compra', 'Data Venda'], infer_datetime_format=True, decimal=',')
+        df = pd.concat([df, df2], axis=0)
 
-    # # Part 2 - Dataset Preparation
-    # if part_2:
-    #     print()
+    df_initial = db_creation(df)
+    df_second_step = db_color_replacement(df_initial)
+    df_third_step = db_score_calculation(df_second_step)
+    df_final = db_duplicate_removal(df_third_step)
 
     sel_cols = ['Modelo', 'Local da Venda', 'Prov', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'buy_day', 'buy_month', 'buy_year', 'sell_day', 'sell_month', 'sell_year', 'price_total', 'stock_days', 'Margem', 'margem_percentagem']
     save_csv(df_final[sel_cols], stock_opt_db)

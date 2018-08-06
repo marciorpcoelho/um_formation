@@ -28,6 +28,7 @@ from classes import ClassFit, ClusterFit, RegFit
 from collections import Counter
 import warnings
 warnings.filterwarnings('ignore')
+
 os.environ["PATH"] += os.pathsep + 'C:/Program Files (x86)/graphviz-2.38/bin/'
 pd.set_option('display.expand_frame_repr', False)
 my_dpi = 96
@@ -63,7 +64,7 @@ def main():
     oversample = 0
 
     k = 10  # Number of Folds in Stratified Cross-Validation
-    feat_sel_check = None
+    feat_sel_check = None  # Select whether to use Feature Selection. If None, will not use, if int, uses FS and int represents the number of features to select;
     # Feature Selection Criteria:
     # feature_selection_criteria = chi2
     # feature_selection_criteria = f_classif
@@ -79,9 +80,9 @@ def main():
     # models = ['gc']
     # models = ['bayes']
     # models = ['bagging']
-    # models = ['voting']
+    models = ['voting']
     # models = ['neural']
-    models = ['dt', 'rf', 'lr', 'knn', 'svm', 'ab', 'gc', 'bayes', 'voting']
+    # models = ['dt', 'rf', 'lr', 'knn', 'svm', 'ab', 'gc', 'bayes', 'voting']
     # models = ['dt', 'rf', 'lr', 'ab', 'gc', 'bayes', 'neural', 'voting']
 
     # for feat_sel_check in range(5, 34):
@@ -109,19 +110,6 @@ def main():
         print('\nRunning Time: %.2f' % (time.time() - start), 'seconds')
 
 
-# def corr_plot(train_x, train_y):
-#     train_x['Y'] = train_y
-#
-#     plt.figure(figsize=(2000 / 96, 2000 / 96), dpi=96)
-#     plt.matshow(train_x.corr())
-#     plt.xticks(range(len(train_x.columns)), train_x.columns)
-#     plt.yticks(range(len(train_x.columns)), train_x.columns)
-#     plt.colorbar()
-#     plt.tight_layout()
-#     save_fig('correlation_matrix')
-#     # plt.show()
-
-
 def database_preparation(oversample, target_column, feat_sel_check, feature_selection_criteria):
     print('Preparing database...')
 
@@ -130,6 +118,7 @@ def database_preparation(oversample, target_column, feat_sel_check, feature_sele
     dtypes = {'Modelo': str, 'Prov': str, 'Local da Venda': str, 'Margem': float, 'Navegação': int, 'Sensores': int, 'Cor_Interior': str, 'Caixa Auto': int, 'Cor_Exterior': str, 'Jantes': str, 'stock_days': int, 'margem_percentagem': float, 'buy_day': str, 'buy_month': str, 'buy_year': str, 'price_total': float}
     cols_to_use = ['Unnamed: 0', 'Modelo', 'Prov', 'Local da Venda', 'Cor_Interior', 'Cor_Exterior', 'Navegação', 'Sensores', 'Caixa Auto', 'Jantes', 'stock_days', 'Margem', 'margem_percentagem', 'buy_day', 'buy_month', 'buy_year', 'sell_day', 'sell_month', 'sell_year', 'price_total']
     ohe_cols = ['Jantes_new', 'Cor_Interior_new', 'Cor_Exterior_new', 'Local da Venda_new', 'Modelo_new', 'Prov_new', 'buy_day', 'buy_month', 'buy_year']
+    zscore_cols = ['price_total', 'number_prev_sales', 'last_margin', 'last_stock_days']
 
     df = pd.read_csv('output/' + 'db_full_baviera.csv', usecols=cols_to_use, encoding='utf-8', delimiter=',', index_col=0, dtype=dtypes)
     df = database_cleanup(df)
@@ -137,11 +126,13 @@ def database_preparation(oversample, target_column, feat_sel_check, feature_sele
 
     col_group(df)
 
+    # df.to_csv('output/df_baviera_grouped.csv')
+    # sys.exit()
+
     targets += class_creation(df)
     df = new_features(df)
 
-    z_scores_function(df)
-    # df['price_total'] = stats.zscore(df['price_total'])
+    z_scores_function(df, zscore_cols)
 
     df_ohe = df.copy(deep=True)
     df_ohe = ohe(df_ohe, ohe_cols)
@@ -170,7 +161,7 @@ def new_features(df):
     # sys.exit()
     df.drop(['sell_date', 'sell_day', 'sell_month', 'sell_year'], axis=1, inplace=True)
 
-    return df.fillna(0)  # After doing 3 tests, results seem to be better with fillna(0) instead of dropna() as the extra 1630 lines of data outweights the possible misleading zeros.
+    return df.fillna(0)
     # return df.dropna()
 
 
@@ -211,8 +202,7 @@ def previous_sales_info(x):
     return x
 
 
-def z_scores_function(df):
-    cols_to_normalize = ['price_total', 'number_prev_sales', 'last_margin', 'last_stock_days']
+def z_scores_function(df, cols_to_normalize):
     for col in cols_to_normalize:
         df[col] = stats.zscore(df[col])
 
@@ -220,19 +210,15 @@ def z_scores_function(df):
 
 
 def feature_selection(df, features, target_column, feature_number, feature_selection_criteria):
-    # print('before', '\n', null_analysis(df))
-    # print('before', '\n', df.shape)
 
     x = df[features]
     y = df[target_column]
 
     selector = SelectKBest(feature_selection_criteria, k=feature_number).fit(x, y)
     cols_selected = selector.get_support(indices=True)
-    new_features = list(list(list(x))[i] for i in cols_selected)
-    new_features += list(y)
-    df_new = df[new_features]
-    # print('after', df_new.shape)
-    # print('after', '\n', null_analysis(df_new))
+    new_sel_features = list(list(list(x))[i] for i in cols_selected)
+    new_sel_features += list(y)
+    df_new = df[new_sel_features]
 
     return df_new
 
@@ -334,8 +320,8 @@ def voting_method(train_x, train_y, test_x, test_y, k, score, name):
     _, dt_best = decision_tree(train_x, train_y, k, score, name, voting=1)
     _, rf_best = random_forest(train_x, train_y, k, score, voting=1)
     _, lr_best = logistic_regression(train_x, train_y, k, score, voting=1)
-    _, svm_best = support_vector_machine(train_x, train_y, k, score, voting=1)
-    _, knn_best = k_nearest_neighbours(train_x, train_y, k, score, voting=1)
+    # _, svm_best = support_vector_machine(train_x, train_y, k, score, voting=1)
+    # _, knn_best = k_nearest_neighbours(train_x, train_y, k, score, voting=1)
     _, bayes_best = bayesian_classifier(train_x, train_y, k, score, voting=1)
     _, ab_best = adaboost_classifier(train_x, train_y, k, score, voting=1)
     _, gc_best = gradient_classifier(train_x, train_y, k, score, voting=1)
@@ -344,17 +330,17 @@ def voting_method(train_x, train_y, test_x, test_y, k, score, name):
     print('### Voting ###')
 
     tuned_parameters_vote = {'voting': ['soft']}
-    parameters = {'estimators': [('dt', dt_best), ('rf', rf_best), ('lr', lr_best), ('gc', gc_best)]}
+    parameters = {'estimators': [('dt', dt_best), ('rf', rf_best), ('lr', lr_best), ('gc', gc_best), ('bayes', bayes_best), ('ab', ab_best), ('nn', nn_best)]}
     vote_clf = ClassFit(clf=ensemble.VotingClassifier, params=parameters)
     vote_clf.grid_search(parameters=tuned_parameters_vote, k=k, score=score)
     vote_clf.clf_fit(x=train_x, y=train_y)
-    vote_clf_best = ensemble.VotingClassifier(estimators=[('dt', dt_best), ('rf', rf_best), ('lr', lr_best), ('gc', gc_best)], voting=vote_clf.grid.best_params_['voting'])
+    vote_clf_best = ensemble.VotingClassifier(estimators=[('dt', dt_best), ('rf', rf_best), ('lr', lr_best), ('gc', gc_best), ('bayes', bayes_best), ('ab', ab_best), ('nn', nn_best)], voting=vote_clf.grid.best_params_['voting'])
     vote_clf_best.fit(train_x, train_y)
 
-    models = [dt_best, rf_best, lr_best, svm_best, knn_best, ab_best, gc_best, bayes_best, nn_best, vote_clf_best]
-    # models = [dt_best, rf_best, lr_best, ab_best, gc_best, bayes_best, nn_best, vote_clf_best]
-    plot_roc_curve(models, ['Decision Tree', 'Random Forest', 'Log.Reg.', 'SVM', 'KNN', 'Adaboost', 'Gradient Class.', 'Bayesian',  'Neural Networks', 'Voting'], train_x, train_y, test_x, test_y, 'roc_curve_' + name)
-    # plot_roc_curve(models, ['Decision Tree', 'Random Forest', 'Log.Reg.', 'Adaboost', 'Gradient Class.', 'Bayesian',  'Neural Networks', 'Voting'], train_x, train_y, test_x, test_y, 'roc_curve_' + name)
+    # models = [dt_best, rf_best, lr_best, svm_best, knn_best, ab_best, gc_best, bayes_best, nn_best, vote_clf_best]
+    models = [dt_best, rf_best, lr_best, ab_best, gc_best, bayes_best, nn_best, vote_clf_best]
+    # plot_roc_curve(models, ['Decision Tree', 'Random Forest', 'Log.Reg.', 'SVM', 'KNN', 'Adaboost', 'Gradient Class.', 'Bayesian',  'Neural Networks', 'Voting'], train_x, train_y, test_x, test_y, 'roc_curve_' + name)
+    plot_roc_curve(models, ['Decision Tree', 'Random Forest', 'Log.Reg.', 'Adaboost', 'Gradient Class.', 'Bayesian',  'Neural Networks', 'Voting'], train_x, train_y, test_x, test_y, 'roc_curve_' + name)
 
     return vote_clf, vote_clf_best
 
@@ -378,37 +364,6 @@ def neural_network(train_x, train_y, k, score, voting=0):
 
     if not voting:
         nn_best.fit(train_x, train_y.values.ravel())
-
-    # v1
-    # np.random.seed(42)
-    # syn0 = 2*np.random.random((train_x.shape[1], train_x.shape[0])) - 1
-    # syn1 = 2*np.random.random((train_x.shape[0], 1)) - 1
-    #
-    # for i in range(2):
-    #     start = time.time()
-    #     l0 = train_x
-    #     l1 = nonlin(np.dot(l0, syn0))
-    #     l2 = nonlin(np.dot(l1, syn1))
-    #
-    #     l2_error = np.array(train_y) - l2
-    #
-    #     l2_delta = l2_error * nonlin(l2, True)
-    #
-    #     l1_error = l2_delta.dot(syn1)
-    #
-    #     l1_delta = l1_error * nonlin(l1, True)
-    #
-    #     # if not i % 100:
-    #     print('Error:', str(np.mean(np.abs(l1_error))))
-    #     print('Error:', str(np.mean(np.abs(l2_error))))
-    #
-    #     syn1 = syn1 + l1.T.dot(l2_delta)
-    #     syn0 = syn0 + l0.T.dot(l1_delta)
-    #     # syn0 = syn0 + np.dot(np.array(l0.T), l1_delta)  # Weird Numpy error does not allow me to use a += b instead of a = a + b.
-    #
-    #     print('Running time: %.2f' % (time.time() - start))
-    #
-    # print(np.around(l1), '\n', np.unique(np.around(l1), return_counts=True))
 
     return nn, nn_best
 

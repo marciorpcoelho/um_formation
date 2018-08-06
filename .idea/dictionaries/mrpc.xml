@@ -82,6 +82,8 @@
       <w>kilometros</w>
       <w>kmeans</w>
       <w>laranja</w>
+      <w>lista</w>
+      <w>listas</w>
       <w>manutencao</w>
       <w>manutenção</w>
       <w>marca</w>
@@ -163,6 +165,7 @@
       <w>visita</w>
       <w>xlsx</w>
       <w>zagora</w>
+      <w>zscore</w>
     </words>
   </dictionary>
 </component>
